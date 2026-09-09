@@ -1,0 +1,18 @@
+project:
+  name: spotify-cares-support
+  brand: SpotifyCares
+  random_seed: 42
+
+data:
+  source: thoughtvector/customer-support-on-twitter
+  raw_dir: data/raw
+  interim_dir: data/interim
+  processed_dir: data/processed
+  labels_dir: data/labels
+
+artifacts:
+  directory: artifacts
+  processed_data_format: parquet
+  human_labels_format: csv
+  predictions_format: jsonl
+

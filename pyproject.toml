@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "spotify-cares-support"
+version = "0.1.0"
+description = "A reproducible SpotifyCares support-agent evaluation project."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "google-genai>=1.0,<2",
+  "matplotlib>=3.9,<4",
+  "numpy>=1.26,<3",
+  "pandas>=2.2,<3",
+  "pyarrow>=17,<22",
+  "pydantic>=2.8,<3",
+  "pyyaml>=6.0,<7",
+  "scikit-learn>=1.5,<2",
+  "scipy>=1.13,<2",
+  "seaborn>=0.13,<1",
+  "sentence-transformers>=3.0,<6",
+]
+
+[project.optional-dependencies]
+annotation = ["streamlit>=1.38,<2"]
+dev = ["pytest>=8.3,<10"]
+
+[project.scripts]
+spotify-cares = "spotify_cares.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/spotify_cares"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

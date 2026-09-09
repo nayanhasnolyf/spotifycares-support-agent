@@ -1,0 +1,71 @@
+# Implementation plan
+
+This plan separates exploratory work, model development, frozen evaluation, and reporting. Only Stage 1 is implemented now. Later stages may change as the real data reveals constraints; any meaningful change will be recorded in the decision log.
+
+## Guardrails used throughout
+
+- Use only real SpotifyCares conversations for task examples and measured results.
+- Use synthetic data only in software tests, and label those fixtures clearly.
+- Split examples before fitting or prompt selection, ideally grouping related conversation threads so one exchange cannot leak across splits.
+- Discover intents and develop prompts without viewing golden-test outcomes.
+- Freeze the golden set and evaluation contract before running the final comparison.
+- Keep raw tweets, secrets, and unnecessary personal identifiers out of Git.
+- Save processed datasets as Parquet, human labels as CSV, and predictions as JSONL.
+- Keep pipeline modules callable without Streamlit.
+
+## Version-control workflow
+
+Each completed implementation prompt is checked, documented where appropriate, reviewed for secrets and unintended files, committed with a descriptive conventional commit, and pushed to the connected GitHub branch. Blocked stages may still commit verified progress, but the commit message and handoff must identify the incomplete outcome accurately. Force-pushes, empty commits, deployment, and assignment submission are outside this workflow.
+
+## Stage 1 — Repository scaffold (current)
+
+Create the installable Python 3.11 package, uv environment, validated YAML configuration, CLI entry point, directory conventions, tests, README, implementation plan, and decision log. Verify CLI help, configuration loading, and tests. Do not fetch or inspect assignment data in this stage.
+
+Exit criteria:
+
+- `uv sync --extra dev` succeeds from a clean checkout.
+- `uv run spotify-cares --help` succeeds.
+- `uv run pytest` passes.
+- Brand and file-format contracts are explicit in configuration.
+
+## Stage 2 — Data ingestion and privacy audit
+
+Add a documented acquisition path for the Kaggle dataset, checksum or source-version metadata, schema validation, SpotifyCares filtering, conversation-thread reconstruction, deduplication, and conservative text handling. Produce a descriptive data audit, not task labels or model results.
+
+Exit criteria: the processed conversation table can be rebuilt from locally supplied raw data, row counts are checked, and privacy/repository safeguards are tested.
+
+## Stage 3 — Intent discovery and annotation design
+
+Explore only a designated development sample, propose a compact intent taxonomy grounded in recurring requests, write a labelling guide, and build a local Streamlit annotation tool. Define escalation criteria and reply-rating dimensions. Resolve taxonomy ambiguity before creating the frozen golden set.
+
+Exit criteria: annotation guide and UI are usable, intent definitions have examples and boundaries, and a small calibration batch has been reviewed.
+
+## Stage 4 — Golden-set annotation
+
+Randomly select and genuinely hand-label a target of 200 examples (allowed range: 150–250). Preserve stable IDs and provenance. Double-label a subset to measure agreement and adjudicate disagreements without producing model predictions for the golden set.
+
+Exit criteria: CSV has the required human fields, validation passes, the example count is in range, and the frozen split fingerprint is recorded.
+
+## Stage 5 — Baselines and retrieval
+
+Implement a trivial baseline, a simple scikit-learn baseline, and the proposed intent classifier. Embed historical training conversations with `all-MiniLM-L6-v2`; retrieve with NumPy cosine similarity. Fit and tune using training/development data only.
+
+Exit criteria: deterministic training artifacts and development metrics are produced without reading golden labels during selection.
+
+## Stage 6 — Reply drafting and routing
+
+Use retrieved historical conversations as explicit grounding for Gemini drafts. Validate all structured model responses with Pydantic. Add deterministic policy signals plus model evidence for auto-handle versus human escalation, always storing a reason.
+
+Exit criteria: every prediction has schema-valid intent, reply, retrieval provenance, handling decision, and reason; API failures are recoverable and observable.
+
+## Stage 7 — Automated evaluation and judge validation
+
+Freeze configurations, generate golden predictions once, compute classification and routing metrics with uncertainty intervals, and compare all baselines. Collect human reply ratings, run the LLM judge independently, and report association/agreement plus judge failure analysis.
+
+Exit criteria: one command reproduces saved JSONL predictions, metrics, plots, and runtime in under the target budget on the documented machine/setup.
+
+## Stage 8 — Final report and optional demo
+
+Write the evidence-backed README report: framing, results, baseline comparison, five observed failure modes, “What is misleading about my headline number?”, and next steps. Optionally add a thin Streamlit demo that calls the same package APIs.
+
+Exit criteria: every reported number traces to a generated artifact, instructions work from a clean checkout, and no secrets or raw personal data are tracked.
