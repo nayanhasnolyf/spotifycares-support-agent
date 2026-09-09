@@ -9,6 +9,9 @@ def test_help_is_available(capsys):
     assert "extract" in output
     assert "preprocess" in output
     assert "validate-splits" in output
+    assert "prepare-annotations" in output
+    assert "validate-annotations" in output
+    assert "freeze-guide" in output
 
 
 def test_version_is_available(capsys):

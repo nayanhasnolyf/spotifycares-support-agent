@@ -43,6 +43,7 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-09
 - **Decision:** Put Streamlit in an optional `annotation` dependency group and keep package/CLI code independent of it.
 - **Rationale:** Annotation UI dependencies should not increase the cost or fragility of the required headless evaluation path.
+- **Stage 4 refinement (2026-09-10):** The UI reads through a package-level annotation store, starts every judgment blank, and reveals a historical reply only after the initial intent/escalation decision is persisted. A local hash-based freeze gates development and golden views. This keeps protocol enforcement testable without Streamlit and makes post-reference edits auditable.
 
 ## D008 — Do not claim placeholder results
 
@@ -55,6 +56,7 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-09
 - **Decision:** Ignore `data/labels` and generated `artifacts` by default, then intentionally allow individual reviewed files only after redistribution and privacy checks.
 - **Rationale:** Human labels and evaluation examples may reproduce customer text. Opt-in tracking makes an accidental personal-data commit less likely while preserving a path to version safe, permitted artifacts later.
+- **Stage 4 refinement (2026-09-10):** Queue Parquet, label CSV, audit JSONL, local freeze state, and redacted taxonomy examples all live under ignored `data/labels/annotation`. The committed taxonomy contains stable derived example IDs but no customer text; real redacted examples are joined locally for review.
 
 ## D010 — Normalize tracked text files to LF
 
@@ -85,6 +87,7 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-09
 - **Decision:** Form exact keys from normalized unredacted customer text, generate near-copy candidates through rare character four-gram blocks, and union accepted links with conversation membership before splitting.
 - **Rationale:** Matching redacted text could make unrelated personal details collapse to the same placeholder. Rare deterministic blocks avoid an unrestricted all-pairs comparison, while combined groups keep repeated information on one side of evaluation.
+- **Stage 4 refinement (2026-09-10):** Annotation queues take at most one record per conversation and combined duplicate group. Golden selection fixes 150 hash-ranked random records first, then 50 records round-robin across predeclared observable challenge flags. This preserves a broad random stratum while testing difficult inputs without treating sampling flags as labels.
 
 ## D015 — Quarantine groups that cross strict chronological cutoffs
 

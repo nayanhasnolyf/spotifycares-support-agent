@@ -1,0 +1,186 @@
+schema_version: 1
+brand: SpotifyCares
+status: proposed
+taxonomy_version: spotify-intents-v0.1-proposed
+guide_version: spotify-annotation-v0.1-proposed
+primary_intent_rule: >-
+  Choose the issue that the next useful support reply should address first. If a
+  dangerous secondary issue exists, keep one primary intent and capture the danger
+  with risk flags and the independent escalation decision.
+
+intents:
+  - label: playback_and_audio
+    name: Playback and audio
+    meaning: Music or podcast playback starts incorrectly, stops, skips, repeats, or sounds wrong.
+    include:
+      - A play action does nothing, playback stops, or audio is absent or incorrect.
+      - Shuffle, queue, autoplay, or unwanted-track behaviour is the main problem.
+      - Offline or downloaded content will not play when the download still exists.
+    exclude:
+      - The application crashes, cannot launch, or has a device-interface defect.
+      - A song or album is missing from the Spotify catalog.
+      - Saved or downloaded items disappeared and must be restored.
+    example_ids:
+      - example_c11c2af86283b624
+      - example_e010567e538c24fb
+      - example_ea67af6bbbf9f0a8
+
+  - label: app_device_technical
+    name: App, device, and connectivity
+    meaning: The Spotify software, website, device integration, or connection is malfunctioning.
+    include:
+      - Crashes, launch failures, freezes, broken controls, layout defects, or sign-outs caused by the app.
+      - Device, operating-system, Bluetooth, speaker, web-player, or connectivity troubleshooting.
+      - Playback symptoms whose cause is explicitly a device or integration failure.
+    exclude:
+      - Routine password or account-credential problems.
+      - Pure playback behaviour without a stated app, device, or connection fault.
+      - Requests for a device integration that does not yet exist.
+    example_ids:
+      - example_c258283f5a9bf8f4
+      - example_94f322f96ff8c367
+      - example_9c9264c418ca35c1
+
+  - label: account_access_and_profile
+    name: Account access and profile
+    meaning: Login, credentials, identity, account linkage, profile, or account ownership is the main issue.
+    include:
+      - Forgotten credentials, login failure, unwanted sign-outs, email changes, or Facebook-linked access.
+      - Account transfer, merge, profile, artist-account access, or username questions.
+      - Suspected takeover or an unknown account using the customer's identity or email.
+    exclude:
+      - Joining or managing a Family, Student, or Premium plan when login itself works.
+      - A payment failure or disputed charge.
+      - An application-wide login defect clearly isolated to one device or client.
+    example_ids:
+      - example_024009367565d104
+      - example_70eef0bd054839ca
+      - example_ddf4e7f27fe2fde2
+
+  - label: plan_and_membership
+    name: Plan and membership
+    meaning: Choosing, starting, cancelling, verifying, or managing Premium, Family, Student, trial, or partner membership.
+    include:
+      - Eligibility, invitations, member removal, plan features, cancellation how-to, or plan conversion.
+      - General subscription instructions that do not require investigating a transaction.
+      - A partner bundle or paid entitlement is not recognized when the transaction itself is not disputed.
+    exclude:
+      - A wrong, duplicate, unknown, or failed charge that requires payment investigation.
+      - Login or ownership problems unrelated to plan membership.
+    example_ids:
+      - example_002abb33e5a2843f
+      - example_63dc465356607f56
+      - example_f70e3b1c0afb2097
+
+  - label: billing_and_payment
+    name: Billing and payment
+    meaning: A charge, price, refund, payment method, billing date, or transaction outcome is disputed or failing.
+    include:
+      - Duplicate, unexpected, incorrect, fraudulent, or unrecognized charges.
+      - Refund requests, card rejection, failed payment updates, and discount-price discrepancies.
+      - Payment was taken but the paid entitlement is missing when transaction investigation is central.
+    exclude:
+      - General instructions for choosing or cancelling a plan with no transaction problem.
+      - Family or Student membership mechanics unrelated to money movement.
+    example_ids:
+      - example_05e473f81bb805f8
+      - example_5e5e42e488fdbcb5
+      - example_6891e627067cec2b
+
+  - label: library_and_playlists
+    name: Library, downloads, and playlists
+    meaning: Saved items, downloads, playlists, queue contents, or personal-library organization is the main issue.
+    include:
+      - Saved music or downloads disappeared, limits were reached, or items cannot be organized.
+      - Creating, sharing, transferring, publishing, following, or editing a playlist.
+      - Personal playlist contents are wrong when the track still exists in the catalog.
+    exclude:
+      - Playback behaviour such as shuffle or autoplay when saved items remain intact.
+      - A song, album, podcast, or artist is absent or incorrectly attributed in the global catalog.
+      - Editorial requests to place an artist on a Spotify-curated playlist.
+    example_ids:
+      - example_213252fb9921aad0
+      - example_11cc8e92f39146a9
+      - example_8412b5744542483b
+
+  - label: catalog_and_content
+    name: Catalog and content
+    meaning: Spotify's available music or podcast catalog, metadata, regional availability, or editorial placement is the issue.
+    include:
+      - Missing, unavailable, incorrect, mislabeled, or wrongly attributed songs, albums, artists, or podcasts.
+      - Requests to add content or place content in a Spotify-curated playlist.
+      - Explicit tags, credits, artist pages, or other catalog metadata problems.
+    exclude:
+      - Items missing only from the customer's own library or playlist.
+      - Playback failure when the catalog item is visibly available.
+      - Requests for a product feature, device app, or country launch.
+    example_ids:
+      - example_01fca36c1df9310d
+      - example_7ded31bdcf39c9ec
+      - example_0cd433b32d996979
+
+  - label: feature_and_market_availability
+    name: Features and availability
+    meaning: A product capability, integration, market launch, or product-policy feature is requested or explained.
+    include:
+      - Requests for a new feature or an unavailable device integration.
+      - Questions about whether or when Spotify will support a country, platform, or capability.
+      - Product how-to questions not better covered by plan, account, library, or playback intents.
+    exclude:
+      - An existing feature is malfunctioning on a supported app or device.
+      - A music release is unavailable in the catalog.
+      - Plan or billing availability and eligibility.
+    example_ids:
+      - example_0104a0c15a41f968
+      - example_8b8ed7ab362b18e5
+      - example_db51b2cd4e7e61f5
+
+  - label: other_or_unclear
+    name: Other or unclear
+    meaning: The available input is social, already resolved, unrelated, or too vague to assign another intent reliably.
+    include:
+      - Thanks, praise, acknowledgements, conversational fragments, and status-only follow-ups.
+      - General complaints or contact requests with no discernible underlying issue.
+      - Messages outside the supported taxonomy.
+    exclude:
+      - A short message whose preceding context makes a supported issue clear.
+      - Any message with enough evidence for another primary intent.
+    example_ids:
+      - example_004f2437bec807bb
+      - example_d2e1b1fe66646276
+      - example_d4492da5118b3f9a
+
+tie_breakers:
+  - If a track is available but will not play, choose playback_and_audio; if it is absent or region-unavailable, choose catalog_and_content.
+  - If the client crashes or a device integration fails, choose app_device_technical even when playback is the visible symptom.
+  - If saved items disappeared, choose library_and_playlists; if they remain saved but will not play, choose playback_and_audio.
+  - Choose plan_and_membership for general subscription steps; choose billing_and_payment when a charge, refund, payment method, or transaction must be investigated.
+  - Choose account_access_and_profile for credential help; use the security risk flag and escalate when takeover or compromise is suspected.
+  - For multiple issues, choose the one the next useful reply must address first and separately record every applicable risk and escalation reason.
+  - Use other_or_unclear only after reading the available preceding context in order.
+
+risk_flags:
+  - security_or_compromise
+  - payment_dispute
+  - personal_data_exposure
+  - legal_or_safety_concern
+  - abusive_or_threatening_content
+
+escalation_policy:
+  auto_handle_definition: >-
+    The available customer message and preceding context support a routine response
+    that does not require private account access, an account-specific action, or an
+    unverified current-policy claim.
+  reason_codes:
+    - code: security_or_account_compromise
+      meaning: The case suggests takeover, unauthorized access, identity misuse, or another security incident.
+    - code: private_account_investigation_or_action
+      meaning: A responsible response requires looking up, changing, restoring, or verifying a specific account.
+    - code: refund_or_payment_investigation
+      meaning: A refund, unknown charge, duplicate charge, or account-specific payment dispute must be investigated.
+    - code: materially_insufficient_context
+      meaning: The message and available preceding context do not support a responsible routine answer.
+    - code: multiple_issues_include_human_required
+      meaning: At least one issue in a multi-issue message requires human handling.
+    - code: unavailable_current_fact_or_policy
+      meaning: The answer depends on current facts or policy unavailable to this historical-data prototype.

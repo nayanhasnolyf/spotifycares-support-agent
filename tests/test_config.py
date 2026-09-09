@@ -10,6 +10,9 @@ def test_project_config_names_final_brand():
     assert config.extraction.input_path == Path("data/raw/twcs.csv")
     assert config.preprocessing.output_dir == Path("data/processed/splits")
     assert config.preprocessing.discovery_sample_size == 400
+    assert config.annotation.taxonomy_path == Path("configs/taxonomy.yaml")
+    assert config.annotation.golden_random_size == 150
+    assert config.annotation.golden_challenge_size == 50
 
 
 def test_required_storage_formats_are_explicit():

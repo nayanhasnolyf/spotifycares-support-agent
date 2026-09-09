@@ -1,6 +1,6 @@
 # Implementation plan
 
-This plan separates exploratory work, model development, frozen evaluation, and reporting. Stages 1 through 3 are implemented. Later stages may change as the real data reveals constraints; any meaningful change will be recorded in the decision log.
+This plan separates exploratory work, model development, frozen evaluation, and reporting. Stages 1 through 3 are complete. Stage 4 tooling and queues are ready, while its required human review and pilot remain open. Later stages may change as the real data reveals constraints; any meaningful change will be recorded in the decision log.
 
 ## Guardrails used throughout
 
@@ -40,13 +40,15 @@ Implemented conservative normalization and role-aware redaction, structural elig
 
 Exit criteria met: all 41,339 real examples were processed; 27,455 train, 5,198 development, 5,172 test-candidate, and 3,514 cutoff-spanning examples were produced; strict chronology and all nine leakage checks pass; local derived text remains Git-ignored.
 
-## Stage 4 — Intent discovery and annotation design (next)
+## Stage 4 — Intent discovery and annotation design (tooling and queues ready; human checkpoint pending)
 
-Explore only a designated development sample, propose a compact intent taxonomy grounded in recurring requests, write a labelling guide, and build a local Streamlit annotation tool. Define escalation criteria and reply-rating dimensions. Resolve taxonomy ambiguity before creating the frozen golden set.
+Inspect only the 400-message training discovery sample, propose a compact taxonomy grounded in recurring requests, write a labelling guide, and build a local Streamlit annotation tool. Define intent, risk, ambiguity, expected-reply guidance, and policy escalation separately. Prepare deterministic 300/80/200 training/development/golden queues without moving examples across Stage 3 pools. Keep development and golden views locked until a human reviews a 30-item training pilot and freezes the exact guide hashes.
 
-Exit criteria: annotation guide and UI are usable, intent definitions have examples and boundaries, and a small calibration batch has been reviewed.
+Implemented: nine proposed intents have inclusion/exclusion rules, training example IDs, local ignored redacted examples, and difficult-boundary rules; all 12 Stage 3 output hashes and nine leakage checks pass; the annotation UI and validators are usable; queues contain 300 training, 80 development, and exactly 200 golden examples with 150/50 strata and group separation.
 
-## Stage 5 — Golden-set annotation
+Still required for Stage 4 completion: the project owner must review the proposal, genuinely label the 30-item training pilot, resolve or accept recorded ambiguities, and explicitly freeze the taxonomy/escalation/guide contract. Tool readiness is not human-labelling completion.
+
+## Stage 5 — Golden-set annotation (blocked on Stage 4 human freeze)
 
 Randomly select and genuinely hand-label a target of 200 examples (allowed range: 150–250). Preserve stable IDs and provenance. Double-label a subset to measure agreement and adjudicate disagreements without producing model predictions for the golden set.
 

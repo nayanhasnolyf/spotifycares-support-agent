@@ -2,7 +2,7 @@
 
 This repository is the staged implementation of a Hiver SDE Intern take-home assignment. It will use real SpotifyCares conversations from Kaggle's `thoughtvector/customer-support-on-twitter` dataset to classify support intents, retrieve relevant historical conversations, draft grounded replies, and decide whether each case can be auto-handled or needs a human.
 
-Stages 1 through 3 are implemented. The real local source CSV has been extracted, privacy-preprocessed, duplicate-grouped, and split chronologically, while all source-derived text remains Git-ignored. No examples have been intent-labelled, no model has been trained, and no model-evaluation results are claimed yet.
+Stages 1 through 3 are complete, and Stage 4's proposed taxonomy, local annotation tooling, and deterministic queues are ready. The guide has **not** been approved or frozen, and all 580 queue entries remain unlabelled. All source-derived text remains Git-ignored. No classifier has been trained and no model-evaluation result is claimed.
 
 ## Quick start
 
@@ -10,7 +10,7 @@ Prerequisites: [uv](https://docs.astral.sh/uv/) and network access for the first
 
 ```bash
 uv python install 3.11
-uv sync --extra dev
+uv sync --extra dev --extra annotation
 uv run spotify-cares --help
 uv run pytest
 ```
@@ -26,7 +26,7 @@ On PowerShell, use `Copy-Item .env.example .env` instead. The `.env` file and ra
 ## Current CLI
 
 ```text
-usage: spotify-cares [-h] [--version] {config,extract,preprocess,validate-splits} ...
+usage: spotify-cares [-h] [--version] {config,extract,preprocess,validate-splits,prepare-annotations,validate-annotations,guide-status,freeze-guide} ...
 
 SpotifyCares support-agent project tools.
 ```
@@ -95,18 +95,53 @@ Across customer, context, and reply fields, preprocessing replaced 42,026 brand 
 
 All nine leakage checks pass: example, conversation, combined-group, and tweet IDs are disjoint; retrieval and discovery data are training-only; context is ancestor-only; future replies stay outside inputs; and strict chronology holds.
 
+### Stage 4 proposed taxonomy and annotation workflow
+
+Only the 400 redacted training discovery messages were inspected to propose these nine primary intents: `playback_and_audio`, `app_device_technical`, `account_access_and_profile`, `plan_and_membership`, `billing_and_payment`, `library_and_playlists`, `catalog_and_content`, `feature_and_market_availability`, and `other_or_unclear`. Security, payment, personal-data, safety, and abusive-content risks are separate flags. The intent and human-escalation judgments are independent.
+
+| Queue | Size | Construction | Current label state |
+|---|---:|---|---|
+| Training | 300 | Topic-proxy coverage enrichment plus deterministic remainder | 0 complete |
+| Development | 80 | Deterministic hash-ranked sample | Locked; 0 complete |
+| Golden | 200 | 150 random plus 50 challenge | Locked; 0 complete |
+
+Every queue has unique conversation and combined duplicate-group IDs. The golden challenge stratum has 10 selections for each predeclared flag: very short text, missing context, multiple question clauses, security wording, and account-specific payment-dispute wording. These are selection flags—not intent or escalation labels. There is no cross-queue example overlap. The training coverage sample is intentionally enriched and must not be used as an estimate of natural intent frequencies.
+
+Prepare or reproduce the local ignored files, validate them, and start the app:
+
+```bash
+uv run spotify-cares prepare-annotations
+uv run spotify-cares validate-annotations
+uv run --extra annotation streamlit run app/annotation_app.py
+```
+
+The app binds to `http://127.0.0.1:8501` by default and does not deploy. Labels are saved atomically as CSV under `data/labels/annotation/labels/`; queues, audit JSONL, hashes, local state, and redacted taxonomy examples live beside them and are also ignored.
+
+The next action is manual: read `docs/annotation_guide.md`, use only the training queue for a 30-item pilot, and record ambiguous boundaries in notes. Revise the proposed guide if the pilot exposes problems. Only after explicitly accepting the guide should the owner run:
+
+```bash
+uv run spotify-cares freeze-guide \
+  --annotator-id YOUR_ID \
+  --confirm-taxonomy-version spotify-intents-v0.1-proposed \
+  --confirm-guide-version spotify-annotation-v0.1-proposed
+```
+
+That local freeze records the exact taxonomy/guide hashes and unlocks development and golden annotation. It is not automatic and has not happened yet.
+
 ## Repository structure
 
 ```text
 .
 ├── artifacts/                 # Generated predictions, metrics, and figures
-├── configs/project.yaml       # Brand, seed, paths, and artifact formats
+├── app/                       # Optional local Streamlit annotation UI
+├── configs/                   # Project settings and proposed taxonomy
 ├── data/
 │   ├── raw/                   # Unmodified Kaggle files; never committed
 │   ├── interim/               # Rebuildable intermediate data; never committed
 │   ├── processed/             # Rebuildable Parquet datasets
-│   └── labels/                # Human-created CSV labels (added in a later stage)
+│   └── labels/                # Local queues, state, audit, and human CSV labels
 ├── docs/
+│   ├── annotation_guide.md    # Proposed human labelling contract
 │   ├── decision_log.md        # Decisions that have actually been made
 │   └── implementation_plan.md # Stage boundaries and leakage controls
 ├── src/spotify_cares/         # UI-independent Python package and CLI
@@ -121,7 +156,7 @@ The final report will live here. Its required sections are scaffolded below, but
 
 ### Framing and discovered intents
 
-Stage 3 produced a deterministic training-only discovery sample of 400 redacted customer messages. Intent discovery and the annotation guide remain pending; no taxonomy or labels have been created yet.
+Stage 3 produced a deterministic training-only discovery sample of 400 redacted customer messages. Stage 4 used only that sample to propose nine intents and an independent escalation policy. The taxonomy remains proposed pending human pilot review; no labels or performance results exist yet.
 
 ### Results and baseline comparison
 

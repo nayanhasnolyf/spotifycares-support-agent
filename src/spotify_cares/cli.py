@@ -59,6 +59,45 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CONFIG,
         help=f"configuration file (default: {DEFAULT_CONFIG})",
     )
+    prepare_annotations_parser = commands.add_parser(
+        "prepare-annotations", help="prepare deterministic local human-annotation queues"
+    )
+    prepare_annotations_parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG,
+        help=f"configuration file (default: {DEFAULT_CONFIG})",
+    )
+    validate_annotations_parser = commands.add_parser(
+        "validate-annotations", help="validate queues and locally saved human annotations"
+    )
+    validate_annotations_parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG,
+        help=f"configuration file (default: {DEFAULT_CONFIG})",
+    )
+    status_parser = commands.add_parser(
+        "guide-status", help="show the local annotation-guide checkpoint state"
+    )
+    status_parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG,
+        help=f"configuration file (default: {DEFAULT_CONFIG})",
+    )
+    freeze_parser = commands.add_parser(
+        "freeze-guide", help="freeze the reviewed guide and unlock development/golden"
+    )
+    freeze_parser.add_argument("--annotator-id", required=True)
+    freeze_parser.add_argument("--confirm-taxonomy-version", required=True)
+    freeze_parser.add_argument("--confirm-guide-version", required=True)
+    freeze_parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG,
+        help=f"configuration file (default: {DEFAULT_CONFIG})",
+    )
     return parser
 
 
@@ -145,6 +184,61 @@ def main(argv: Sequence[str] | None = None) -> int:
             config.preprocessing.relevant_tweets_path,
         )
         print(f"leakage checks passed: {len(checks)}")
+        return 0
+
+    if args.command == "prepare-annotations":
+        from spotify_cares.annotation import prepare_annotation_queues
+        from spotify_cares.config import load_config
+
+        config = load_config(args.config)
+        manifest = prepare_annotation_queues(config)
+        sizes = manifest["queue_validation"]["queue_sizes"]
+        print(f"training queue: {sizes['training']}")
+        print(f"development queue: {sizes['development']}")
+        print(f"golden queue: {sizes['golden']}")
+        print(f"guide state: {manifest['status']['guide']}")
+        print(f"manifest: {config.annotation.output_dir / 'annotation_manifest.json'}")
+        return 0
+
+    if args.command == "validate-annotations":
+        from spotify_cares.annotation import validate_annotation_outputs
+        from spotify_cares.config import load_config
+
+        config = load_config(args.config)
+        report = validate_annotation_outputs(config)
+        print(f"tooling: {report['tooling']}")
+        print(f"queues: {report['queues']}")
+        print(f"guide: {report['guide']}")
+        for name, counts in report["annotations"].items():
+            print(
+                f"{name}: complete={counts['complete']}/{counts['expected']}, "
+                f"saved={counts['judgment_saved']}, skipped={counts['skipped_incomplete']}, "
+                f"missing={counts['missing']}, stale={counts['stale_requires_human_review']}"
+            )
+        return 0
+
+    if args.command == "guide-status":
+        from spotify_cares.annotation import load_guide_state
+        from spotify_cares.config import load_config
+
+        state = load_guide_state(load_config(args.config))
+        print(f"status: {state['status']}")
+        print(f"taxonomy version: {state['taxonomy_version']}")
+        print(f"guide version: {state['guide_version']}")
+        return 0
+
+    if args.command == "freeze-guide":
+        from spotify_cares.annotation import freeze_guide
+        from spotify_cares.config import load_config
+
+        state = freeze_guide(
+            load_config(args.config),
+            annotator_id=args.annotator_id,
+            confirm_taxonomy_version=args.confirm_taxonomy_version,
+            confirm_guide_version=args.confirm_guide_version,
+        )
+        print(f"status: {state['status']}")
+        print("development and golden annotation: unlocked")
         return 0
 
     parser.print_help()

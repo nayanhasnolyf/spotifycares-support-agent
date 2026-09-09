@@ -37,6 +37,17 @@ preprocessing:
     - spotify.com
     - spoti.fi
 
+annotation:
+  taxonomy_path: configs/taxonomy.yaml
+  guide_path: docs/annotation_guide.md
+  split_dir: data/processed/splits
+  output_dir: data/labels/annotation
+  training_queue_size: 300
+  development_queue_size: 80
+  golden_random_size: 150
+  golden_challenge_size: 50
+  training_pilot_size: 30
+
 artifacts:
   directory: artifacts
   processed_data_format: parquet

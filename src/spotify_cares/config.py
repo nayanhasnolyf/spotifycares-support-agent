@@ -60,6 +60,33 @@ class PreprocessingSettings(StrictModel):
         return self
 
 
+class AnnotationSettings(StrictModel):
+    taxonomy_path: Path
+    guide_path: Path
+    split_dir: Path
+    output_dir: Path
+    training_queue_size: int
+    development_queue_size: int
+    golden_random_size: int
+    golden_challenge_size: int
+    training_pilot_size: int
+
+    @model_validator(mode="after")
+    def validate_sizes(self) -> "AnnotationSettings":
+        values = (
+            self.training_queue_size,
+            self.development_queue_size,
+            self.golden_random_size,
+            self.golden_challenge_size,
+            self.training_pilot_size,
+        )
+        if any(value <= 0 for value in values):
+            raise ValueError("annotation queue and pilot sizes must be positive")
+        if self.training_pilot_size > self.training_queue_size:
+            raise ValueError("training pilot cannot exceed the training queue")
+        return self
+
+
 class ArtifactSettings(StrictModel):
     directory: Path
     processed_data_format: str
@@ -72,6 +99,7 @@ class AppConfig(StrictModel):
     data: DataSettings
     extraction: ExtractionSettings
     preprocessing: PreprocessingSettings
+    annotation: AnnotationSettings
     artifacts: ArtifactSettings
 
 
