@@ -61,3 +61,21 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-09
 - **Decision:** Add a repository-level `.gitattributes` rule that stores text files with LF endings.
 - **Rationale:** The project is developed on Windows but should remain reproducible across operating systems. Stable line endings prevent noisy whole-file diffs and lockfile churn.
+
+## D011 — Index all metadata on disk, then hydrate only relevant text
+
+- **Date:** 2026-09-09
+- **Decision:** Use a chunked first pass into temporary SQLite without tweet text, followed by a second chunked pass that loads text only for SpotifyCares-connected records.
+- **Rationale:** Cross-chunk relationships and duplicates require global lookup, but loading the 516 MB CSV and all customer text into Python memory is unnecessary. A disposable disk index gives exact lookup with bounded memory and a smaller privacy surface.
+
+## D012 — Treat the child's direct-parent field as authoritative
+
+- **Date:** 2026-09-09
+- **Decision:** Build components and verified replies from `in_response_to_tweet_id`; use comma-separated `response_tweet_id` values only as cross-checks. Never repair a contradiction by merging on the response declaration.
+- **Rationale:** A child can name only one direct parent, while the parent's response list is denormalized and can be missing or stale. Keeping disagreements visible avoids contaminating threads and reference targets.
+
+## D013 — Exclude ambiguous components but retain incomplete ancestry
+
+- **Date:** 2026-09-09
+- **Decision:** Exclude candidates from cross-brand, cyclic, or conflicting-duplicate components. Allow a verified direct customer/SpotifyCares pair when older ancestors are missing, while flagging the available-context limitation.
+- **Rationale:** The first conditions make ownership or dialogue order ambiguous. A missing older parent does not invalidate the direct reply evidence, so excluding it would unnecessarily bias the dataset toward fully linked conversations.

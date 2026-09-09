@@ -5,14 +5,21 @@ project:
 
 data:
   source: thoughtvector/customer-support-on-twitter
+  support_author_id: SpotifyCares
   raw_dir: data/raw
   interim_dir: data/interim
   processed_dir: data/processed
   labels_dir: data/labels
+
+extraction:
+  input_path: data/raw/twcs.csv
+  output_dir: data/processed
+  temp_database: data/interim/spotifycares_index.sqlite3
+  chunk_size: 50000
+  audit_example_count: 5
 
 artifacts:
   directory: artifacts
   processed_data_format: parquet
   human_labels_format: csv
   predictions_format: jsonl
-

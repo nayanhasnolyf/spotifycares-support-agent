@@ -1,6 +1,6 @@
 # Implementation plan
 
-This plan separates exploratory work, model development, frozen evaluation, and reporting. Only Stage 1 is implemented now. Later stages may change as the real data reveals constraints; any meaningful change will be recorded in the decision log.
+This plan separates exploratory work, model development, frozen evaluation, and reporting. Stages 1 and 2 are implemented. Later stages may change as the real data reveals constraints; any meaningful change will be recorded in the decision log.
 
 ## Guardrails used throughout
 
@@ -17,7 +17,7 @@ This plan separates exploratory work, model development, frozen evaluation, and 
 
 Each completed implementation prompt is checked, documented where appropriate, reviewed for secrets and unintended files, committed with a descriptive conventional commit, and pushed to the connected GitHub branch. Blocked stages may still commit verified progress, but the commit message and handoff must identify the incomplete outcome accurately. Force-pushes, empty commits, deployment, and assignment submission are outside this workflow.
 
-## Stage 1 — Repository scaffold (current)
+## Stage 1 — Repository scaffold (complete)
 
 Create the installable Python 3.11 package, uv environment, validated YAML configuration, CLI entry point, directory conventions, tests, README, implementation plan, and decision log. Verify CLI help, configuration loading, and tests. Do not fetch or inspect assignment data in this stage.
 
@@ -28,13 +28,13 @@ Exit criteria:
 - `uv run pytest` passes.
 - Brand and file-format contracts are explicit in configuration.
 
-## Stage 2 — Data ingestion and privacy audit
+## Stage 2 — Data ingestion and privacy audit (complete)
 
-Add a documented acquisition path for the Kaggle dataset, checksum or source-version metadata, schema validation, SpotifyCares filtering, conversation-thread reconstruction, deduplication, and conservative text handling. Produce a descriptive data audit, not task labels or model results.
+Implemented a chunked two-pass extractor with a temporary SQLite metadata index, source checksum, schema validation, exact SpotifyCares filtering, branch-safe conversation reconstruction, duplicate/conflict policies, local Parquet outputs, and a measured privacy-conscious audit. No task labels, split, redaction dataset, or model results were created.
 
-Exit criteria: the processed conversation table can be rebuilt from locally supplied raw data, row counts are checked, and privacy/repository safeguards are tested.
+Exit criteria met: the processed tables rebuild from the locally supplied real CSV in 520.4 seconds; aggregate counts and schemas were inspected; direct reply and no-leakage invariants pass; generated text remains Git-ignored; synthetic tests cover reconstruction edge cases.
 
-## Stage 3 — Intent discovery and annotation design
+## Stage 3 — Intent discovery and annotation design (next)
 
 Explore only a designated development sample, propose a compact intent taxonomy grounded in recurring requests, write a labelling guide, and build a local Streamlit annotation tool. Define escalation criteria and reply-rating dimensions. Resolve taxonomy ambiguity before creating the frozen golden set.
 

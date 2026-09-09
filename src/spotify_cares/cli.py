@@ -27,6 +27,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CONFIG,
         help=f"configuration file (default: {DEFAULT_CONFIG})",
     )
+    extract_parser = commands.add_parser(
+        "extract", help="extract and reconstruct SpotifyCares conversations"
+    )
+    extract_parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG,
+        help=f"configuration file (default: {DEFAULT_CONFIG})",
+    )
+    extract_parser.add_argument(
+        "--chunk-size",
+        type=int,
+        help="CSV records per chunk (overrides project configuration)",
+    )
     return parser
 
 
@@ -43,10 +57,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"seed: {config.project.random_seed}")
         return 0
 
+    if args.command == "extract":
+        from spotify_cares.config import load_config
+        from spotify_cares.extraction import extract_spotify_conversations
+
+        config = load_config(args.config)
+        settings = config.extraction
+        chunk_size = args.chunk_size or settings.chunk_size
+        result = extract_spotify_conversations(
+            settings.input_path,
+            settings.output_dir,
+            settings.temp_database,
+            support_author_id=config.data.support_author_id,
+            source_name=config.data.source,
+            chunk_size=chunk_size,
+            audit_example_count=settings.audit_example_count,
+        )
+        counts = result.audit["counts"]
+        print(f"rows scanned: {counts['total_rows_scanned']}")
+        print(f"relevant tweets: {counts['relevant_tweets']}")
+        print(f"eligible examples: {counts['eligible_customer_examples']}")
+        print(f"audit: {result.output_paths['audit']}")
+        return 0
+
     parser.print_help()
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

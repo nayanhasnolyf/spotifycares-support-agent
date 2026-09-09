@@ -2,7 +2,7 @@
 
 This repository is the staged implementation of a Hiver SDE Intern take-home assignment. It will use real SpotifyCares conversations from Kaggle's `thoughtvector/customer-support-on-twitter` dataset to classify support intents, retrieve relevant historical conversations, draft grounded replies, and decide whether each case can be auto-handled or needs a human.
 
-The repository currently contains **only the Stage 1 scaffold**. No dataset has been downloaded, no examples have been labelled, no model has been trained, and no evaluation results are claimed yet.
+Stages 1 and 2 are implemented. The real local source CSV has been validated and extracted, but raw and derived customer text remain Git-ignored. No examples have been intent-labelled, no model has been trained, and no model-evaluation results are claimed yet.
 
 ## Quick start
 
@@ -26,7 +26,7 @@ On PowerShell, use `Copy-Item .env.example .env` instead. The `.env` file and ra
 ## Current CLI
 
 ```text
-usage: spotify-cares [-h] [--version] {config} ...
+usage: spotify-cares [-h] [--version] {config,extract} ...
 
 SpotifyCares support-agent project tools.
 ```
@@ -37,6 +37,39 @@ The initial `config` command prints and validates the central YAML configuration
 uv run spotify-cares config
 uv run spotify-cares config --path configs/project.yaml
 ```
+
+Place the Kaggle CSV at `data/raw/twcs.csv`, then run the complete Stage 2 extraction:
+
+```bash
+uv run spotify-cares extract
+```
+
+The command reads 50,000 records at a time by default. Use `--chunk-size` only for memory-constrained machines or software checks:
+
+```bash
+uv run spotify-cares extract --chunk-size 10000
+```
+
+### Stage 2 measured extraction audit
+
+Source file SHA-256: `cd297fcfa1bf6f99938be242e8e578980bc6d1b96adc8691abec9a39175b03c0`.
+
+| Measure | Observed value |
+|---|---:|
+| Source rows scanned | 2,811,774 |
+| Unique tweet IDs | 2,811,774 |
+| SpotifyCares tweets | 43,265 |
+| Relevant customer tweets | 48,543 |
+| Available conversation groups | 28,280 |
+| Eligible customer examples | 41,339 |
+| Direct SpotifyCares reference replies | 42,830 |
+| Exclusion records | 246 |
+
+Observed quality conditions were 974 missing link targets (69 missing direct parents and 905 missing declared response targets) and 246 cross-brand candidate exclusions. There were no duplicate tweet IDs, conflicting links, cycles, invalid timestamps, missing timestamps, or missing text in the relevant records.
+
+Conversation groups contain 2 tweets at the minimum and median, 3.25 on average, 6 at the 90th percentile, and 354 at the maximum. “Conversation” means the complete **available** connected group; missing source records prevent a guarantee of real-world completeness.
+
+This audit reports dataset construction, not support quality. A SpotifyCares reply may be a question or a request to continue privately and does not prove resolution.
 
 ## Repository structure
 
@@ -64,7 +97,7 @@ The final report will live here. Its required sections are scaffolded below, but
 
 ### Framing and discovered intents
 
-Pending data ingestion, development-only intent discovery, and completion of the annotation guide.
+Stage 2 identified 41,339 eligible customer messages with direct SpotifyCares replies. Intent discovery and the annotation guide remain pending and will use a development-only sample.
 
 ### Results and baseline comparison
 
@@ -88,8 +121,20 @@ Pending evidence from the completed evaluation.
 
 ## Data and privacy
 
-The source dataset is not redistributed here. A later stage will document an explicit download and filtering command. Raw tweets can contain handles and other personal data, so raw and interim files stay outside source control. Human labels will be stored as CSV, processed datasets as Parquet, and predictions as JSONL.
+The source dataset is not redistributed here. Obtain `twcs.csv` from Kaggle's `thoughtvector/customer-support-on-twitter` dataset and place it at `data/raw/twcs.csv`. Raw tweets can contain handles and other personal data, so raw, interim, processed, label, and evaluation artifact contents are ignored by default. Human labels will use CSV, processed datasets use Parquet, and predictions will use JSONL.
+
+The local extraction writes:
+
+- `data/processed/relevant_tweets.parquet`
+- `data/processed/support_examples.parquet`
+- `data/processed/conversations.parquet`
+- `data/processed/relationships.parquet`
+- `data/processed/exclusions.parquet`
+- `data/processed/duplicate_records.parquet`
+- `data/processed/extraction_audit.json`
+
+No source-derived text or examples are committed. See `docs/extraction.md` for the field separation and quality policies.
 
 ## Reproducibility target
 
-The final headline experiment is designed to run in under 15 minutes after prerequisites and cached model/data assets are available. The future evaluation command will time itself and record environment metadata; no runtime claim has been measured in this scaffold stage.
+The final-code Stage 2 extraction completed in 520.4 seconds (8 minutes 40 seconds) on the development machine. This is an ingestion runtime, not the future model-evaluation runtime. The final headline experiment will be timed and recorded separately.
