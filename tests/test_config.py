@@ -8,6 +8,8 @@ def test_project_config_names_final_brand():
     assert config.project.brand == "SpotifyCares"
     assert config.data.support_author_id == "SpotifyCares"
     assert config.extraction.input_path == Path("data/raw/twcs.csv")
+    assert config.preprocessing.output_dir == Path("data/processed/splits")
+    assert config.preprocessing.discovery_sample_size == 400
 
 
 def test_required_storage_formats_are_explicit():

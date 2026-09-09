@@ -18,6 +18,25 @@ extraction:
   chunk_size: 50000
   audit_example_count: 5
 
+preprocessing:
+  examples_path: data/processed/support_examples.parquet
+  relevant_tweets_path: data/processed/relevant_tweets.parquet
+  conversations_path: data/processed/conversations.parquet
+  output_dir: data/processed/splits
+  version: spotify-preprocess-v1
+  train_fraction: 0.70
+  development_fraction: 0.15
+  test_fraction: 0.15
+  near_duplicate_threshold: 0.92
+  near_duplicate_min_chars: 20
+  shingle_size: 4
+  candidate_keys: 4
+  max_block_size: 100
+  discovery_sample_size: 400
+  safe_url_domains:
+    - spotify.com
+    - spoti.fi
+
 artifacts:
   directory: artifacts
   processed_data_format: parquet

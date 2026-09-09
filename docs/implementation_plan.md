@@ -1,6 +1,6 @@
 # Implementation plan
 
-This plan separates exploratory work, model development, frozen evaluation, and reporting. Stages 1 and 2 are implemented. Later stages may change as the real data reveals constraints; any meaningful change will be recorded in the decision log.
+This plan separates exploratory work, model development, frozen evaluation, and reporting. Stages 1 through 3 are implemented. Later stages may change as the real data reveals constraints; any meaningful change will be recorded in the decision log.
 
 ## Guardrails used throughout
 
@@ -34,37 +34,43 @@ Implemented a chunked two-pass extractor with a temporary SQLite metadata index,
 
 Exit criteria met: the processed tables rebuild from the locally supplied real CSV in 520.4 seconds; aggregate counts and schemas were inspected; direct reply and no-leakage invariants pass; generated text remains Git-ignored; synthetic tests cover reconstruction edge cases.
 
-## Stage 3 — Intent discovery and annotation design (next)
+## Stage 3 — Preprocessing and leakage-resistant pools (complete)
+
+Implemented conservative normalization and role-aware redaction, structural eligibility revalidation, exact and blocked near-duplicate detection, conversation/duplicate combined groups, strict chronological splitting with boundary quarantine, separate input/reference exports, a training-only retrieval corpus, a deterministic 400-message discovery sample, an output-hashed manifest, and independent leakage validation.
+
+Exit criteria met: all 41,339 real examples were processed; 27,455 train, 5,198 development, 5,172 test-candidate, and 3,514 cutoff-spanning examples were produced; strict chronology and all nine leakage checks pass; local derived text remains Git-ignored.
+
+## Stage 4 — Intent discovery and annotation design (next)
 
 Explore only a designated development sample, propose a compact intent taxonomy grounded in recurring requests, write a labelling guide, and build a local Streamlit annotation tool. Define escalation criteria and reply-rating dimensions. Resolve taxonomy ambiguity before creating the frozen golden set.
 
 Exit criteria: annotation guide and UI are usable, intent definitions have examples and boundaries, and a small calibration batch has been reviewed.
 
-## Stage 4 — Golden-set annotation
+## Stage 5 — Golden-set annotation
 
 Randomly select and genuinely hand-label a target of 200 examples (allowed range: 150–250). Preserve stable IDs and provenance. Double-label a subset to measure agreement and adjudicate disagreements without producing model predictions for the golden set.
 
 Exit criteria: CSV has the required human fields, validation passes, the example count is in range, and the frozen split fingerprint is recorded.
 
-## Stage 5 — Baselines and retrieval
+## Stage 6 — Baselines and retrieval
 
 Implement a trivial baseline, a simple scikit-learn baseline, and the proposed intent classifier. Embed historical training conversations with `all-MiniLM-L6-v2`; retrieve with NumPy cosine similarity. Fit and tune using training/development data only.
 
 Exit criteria: deterministic training artifacts and development metrics are produced without reading golden labels during selection.
 
-## Stage 6 — Reply drafting and routing
+## Stage 7 — Reply drafting and routing
 
 Use retrieved historical conversations as explicit grounding for Gemini drafts. Validate all structured model responses with Pydantic. Add deterministic policy signals plus model evidence for auto-handle versus human escalation, always storing a reason.
 
 Exit criteria: every prediction has schema-valid intent, reply, retrieval provenance, handling decision, and reason; API failures are recoverable and observable.
 
-## Stage 7 — Automated evaluation and judge validation
+## Stage 8 — Automated evaluation and judge validation
 
 Freeze configurations, generate golden predictions once, compute classification and routing metrics with uncertainty intervals, and compare all baselines. Collect human reply ratings, run the LLM judge independently, and report association/agreement plus judge failure analysis.
 
 Exit criteria: one command reproduces saved JSONL predictions, metrics, plots, and runtime in under the target budget on the documented machine/setup.
 
-## Stage 8 — Final report and optional demo
+## Stage 9 — Final report and optional demo
 
 Write the evidence-backed README report: framing, results, baseline comparison, five observed failure modes, “What is misleading about my headline number?”, and next steps. Optionally add a thin Streamlit demo that calls the same package APIs.
 

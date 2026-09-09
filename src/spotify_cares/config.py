@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class StrictModel(BaseModel):
@@ -35,6 +35,31 @@ class ExtractionSettings(StrictModel):
     audit_example_count: int
 
 
+class PreprocessingSettings(StrictModel):
+    examples_path: Path
+    relevant_tweets_path: Path
+    conversations_path: Path
+    output_dir: Path
+    version: str
+    train_fraction: float
+    development_fraction: float
+    test_fraction: float
+    near_duplicate_threshold: float
+    near_duplicate_min_chars: int
+    shingle_size: int
+    candidate_keys: int
+    max_block_size: int
+    discovery_sample_size: int
+    safe_url_domains: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def validate_fractions(self) -> "PreprocessingSettings":
+        total = self.train_fraction + self.development_fraction + self.test_fraction
+        if abs(total - 1.0) > 1e-9:
+            raise ValueError("preprocessing split fractions must sum to 1")
+        return self
+
+
 class ArtifactSettings(StrictModel):
     directory: Path
     processed_data_format: str
@@ -46,6 +71,7 @@ class AppConfig(StrictModel):
     project: ProjectSettings
     data: DataSettings
     extraction: ExtractionSettings
+    preprocessing: PreprocessingSettings
     artifacts: ArtifactSettings
 
 

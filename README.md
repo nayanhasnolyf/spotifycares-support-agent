@@ -2,7 +2,7 @@
 
 This repository is the staged implementation of a Hiver SDE Intern take-home assignment. It will use real SpotifyCares conversations from Kaggle's `thoughtvector/customer-support-on-twitter` dataset to classify support intents, retrieve relevant historical conversations, draft grounded replies, and decide whether each case can be auto-handled or needs a human.
 
-Stages 1 and 2 are implemented. The real local source CSV has been validated and extracted, but raw and derived customer text remain Git-ignored. No examples have been intent-labelled, no model has been trained, and no model-evaluation results are claimed yet.
+Stages 1 through 3 are implemented. The real local source CSV has been extracted, privacy-preprocessed, duplicate-grouped, and split chronologically, while all source-derived text remains Git-ignored. No examples have been intent-labelled, no model has been trained, and no model-evaluation results are claimed yet.
 
 ## Quick start
 
@@ -26,7 +26,7 @@ On PowerShell, use `Copy-Item .env.example .env` instead. The `.env` file and ra
 ## Current CLI
 
 ```text
-usage: spotify-cares [-h] [--version] {config,extract} ...
+usage: spotify-cares [-h] [--version] {config,extract,preprocess,validate-splits} ...
 
 SpotifyCares support-agent project tools.
 ```
@@ -71,6 +71,30 @@ Conversation groups contain 2 tweets at the minimum and median, 3.25 on average,
 
 This audit reports dataset construction, not support quality. A SpotifyCares reply may be a question or a request to continue privately and does not prove resolution.
 
+### Stage 3 preprocessing and chronological pools
+
+```bash
+uv run spotify-cares preprocess
+uv run spotify-cares validate-splits
+```
+
+The final Stage 3 run completed in 136.6 seconds and produced:
+
+| Assignment | Examples | Complete content date range (UTC) |
+|---|---:|---|
+| Training/retrieval | 27,455 | 2014-05-15 23:34:20 to 2017-11-15 23:20:34 |
+| Development | 5,198 | 2017-11-15 23:24:19 to 2017-11-25 22:26:20 |
+| Held-out test candidates | 5,172 | 2017-11-25 22:28:46 to 2017-12-03 22:56:04 |
+| Quarantined | 3,514 | Combined groups spanning a chronological cutoff |
+
+All 41,339 Stage 2 examples passed structural revalidation. The target fractions were 70%/15%/15%, but exact ratios were not forced: conversation and duplicate groups remain indivisible, and boundary-spanning groups are quarantined. The test-candidate pool is large enough to support a later 200-example golden set; it has not been selected or labelled.
+
+The duplicate audit found 165 exact groups covering 775 examples and 145 conservative near-duplicate groups covering 360 representatives from 280 accepted links. Near matching evaluated 252,967 blocked candidates, while 425 messages shorter than 20 characters participated only in exact matching. The largest conversation-plus-duplicate group contains 624 examples across 129 threads; it was kept intact. Transitive grouping can be broader than any one pair, which is a known conservative risk.
+
+Across customer, context, and reply fields, preprocessing replaced 42,026 brand handles, 94,046 other handles, 37,129 URLs, 1,561 IP addresses, 244 phone-like strings, and 15 long numbers. No email patterns were detected. Automated redaction is imperfect and is not a claim of anonymity.
+
+All nine leakage checks pass: example, conversation, combined-group, and tweet IDs are disjoint; retrieval and discovery data are training-only; context is ancestor-only; future replies stay outside inputs; and strict chronology holds.
+
 ## Repository structure
 
 ```text
@@ -97,7 +121,7 @@ The final report will live here. Its required sections are scaffolded below, but
 
 ### Framing and discovered intents
 
-Stage 2 identified 41,339 eligible customer messages with direct SpotifyCares replies. Intent discovery and the annotation guide remain pending and will use a development-only sample.
+Stage 3 produced a deterministic training-only discovery sample of 400 redacted customer messages. Intent discovery and the annotation guide remain pending; no taxonomy or labels have been created yet.
 
 ### Results and baseline comparison
 
@@ -133,7 +157,7 @@ The local extraction writes:
 - `data/processed/duplicate_records.parquet`
 - `data/processed/extraction_audit.json`
 
-No source-derived text or examples are committed. See `docs/extraction.md` for the field separation and quality policies.
+No source-derived text or examples are committed. See `docs/extraction.md` for reconstruction details and `docs/preprocessing.md` for redaction, duplicate grouping, split rules, and Stage 3 output schemas.
 
 ## Reproducibility target
 

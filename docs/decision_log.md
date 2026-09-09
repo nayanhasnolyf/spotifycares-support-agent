@@ -79,3 +79,15 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-09
 - **Decision:** Exclude candidates from cross-brand, cyclic, or conflicting-duplicate components. Allow a verified direct customer/SpotifyCares pair when older ancestors are missing, while flagging the available-context limitation.
 - **Rationale:** The first conditions make ownership or dialogue order ambiguous. A missing older parent does not invalidate the direct reply evidence, so excluding it would unnecessarily bias the dataset toward fully linked conversations.
+
+## D014 — Detect duplicates before redaction with bounded lexical candidates
+
+- **Date:** 2026-09-09
+- **Decision:** Form exact keys from normalized unredacted customer text, generate near-copy candidates through rare character four-gram blocks, and union accepted links with conversation membership before splitting.
+- **Rationale:** Matching redacted text could make unrelated personal details collapse to the same placeholder. Rare deterministic blocks avoid an unrestricted all-pairs comparison, while combined groups keep repeated information on one side of evaluation.
+
+## D015 — Quarantine groups that cross strict chronological cutoffs
+
+- **Date:** 2026-09-09
+- **Decision:** Base each example interval on all context, customer, and reply timestamps; quarantine an entire combined group if it spans a cutoff or has an unusable timestamp.
+- **Rationale:** Splitting a duplicate-connected group would leak related language, while assigning a spanning group to training could place replies after held-out periods begin. Quarantine preserves both group integrity and honest chronology even when pool ratios move away from 70/15/15.

@@ -7,6 +7,8 @@ def test_help_is_available(capsys):
     assert "SpotifyCares support-agent project tools" in output
     assert "config" in output
     assert "extract" in output
+    assert "preprocess" in output
+    assert "validate-splits" in output
 
 
 def test_version_is_available(capsys):
