@@ -14,6 +14,8 @@ No selected development or test message was displayed or manually inspected whil
 
 The generated training queue has 27 records in each of the 11 named coverage buckets plus 3 deterministic remainder records. The golden challenge set has 10 records assigned to each of its five flags. These are measured queue-construction counts, not class prevalence or labelled outcomes.
 
+Named training-only extensions can be appended later with `extend-training-queue`. Existing IDs and positions are preserved, used conversations and duplicate groups are excluded, and rerunning `prepare-annotations` preserves recorded extensions. An optional observable coverage bucket supports intentional enrichment when genuine labels reveal a thin class; the batch metadata records that choice and never presents it as a label.
+
 ## Local files
 
 `spotify-cares prepare-annotations` writes beneath `data/labels/annotation/`:

@@ -76,7 +76,7 @@ Expected reply guidance should state what a good response needs to accomplish, i
 2. Start only the `training` queue. Label the first 30 items as the pilot.
 3. Record difficult cases as `ambiguous` with a note. Use Skip only when work must pause; skipped items remain incomplete.
 4. Review the pilot's ambiguities and recurring boundary problems. Revise this guide and `configs/taxonomy.yaml` if needed, change both version strings, regenerate queues, and re-review affected training annotations.
-5. When the project owner explicitly accepts the definitions and policy, freeze the exact current file hashes with the command below. Do not run it merely because the software works.
+5. When the project owner explicitly accepts the definitions and policy, freeze the exact current file hashes with the command below. The command refuses to freeze until all 30 pilot records are complete and current. Do not run it merely because the software works.
 6. Only after the freeze, annotate development and golden queues. Never use golden labels to tune the taxonomy, prompts, classifier, thresholds, or retrieval.
 
 Freeze command for the current proposal:
@@ -89,6 +89,14 @@ uv run spotify-cares freeze-guide `
 ```
 
 This writes only local ignored state and unlocks development/golden views. If either tracked file later changes, their hashes will no longer match the freeze. The tool blocks those queues and the validator flags older records as stale for human review; it never silently relabels them.
+
+If later training analysis shows thin coverage, append a named training-only batch without replacing existing queue positions:
+
+```powershell
+uv run spotify-cares extend-training-queue --name batch2 --size 100
+```
+
+Optionally add an observable proxy such as `--coverage-bucket billing`. Such enrichment is a sampling aid, never a prefilled label or a natural-frequency sample.
 
 ## Annotation states
 

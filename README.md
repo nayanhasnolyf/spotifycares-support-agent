@@ -26,7 +26,7 @@ On PowerShell, use `Copy-Item .env.example .env` instead. The `.env` file and ra
 ## Current CLI
 
 ```text
-usage: spotify-cares [-h] [--version] {config,extract,preprocess,validate-splits,prepare-annotations,validate-annotations,guide-status,freeze-guide} ...
+usage: spotify-cares [-h] [--version] {config,extract,preprocess,validate-splits,prepare-annotations,validate-annotations,extend-training-queue,guide-status,freeze-guide} ...
 
 SpotifyCares support-agent project tools.
 ```
@@ -126,7 +126,15 @@ uv run spotify-cares freeze-guide \
   --confirm-guide-version spotify-annotation-v0.1-proposed
 ```
 
-That local freeze records the exact taxonomy/guide hashes and unlocks development and golden annotation. It is not automatic and has not happened yet.
+The freeze command first verifies that all 30 pilot records are complete under the current taxonomy and guide hashes. It then records those hashes and unlocks development and golden annotation. It is not automatic and has not happened yet.
+
+If the genuinely labelled training set later lacks coverage, append a named training-only batch without replacing the initial 300 or any existing extension:
+
+```bash
+uv run spotify-cares extend-training-queue --name batch2 --size 100
+```
+
+An optional `--coverage-bucket billing` (or another documented observable proxy) can enrich a later batch, but that proxy is not a human intent label and the resulting batch does not represent natural frequency.
 
 ## Repository structure
 

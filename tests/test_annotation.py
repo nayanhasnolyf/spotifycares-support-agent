@@ -13,6 +13,7 @@ from spotify_cares.annotation import (
     AnnotationStore,
     annotation_paths,
     current_contract,
+    extend_training_queue,
     freeze_guide,
     get_annotation_view,
     reveal_reference,
@@ -160,6 +161,17 @@ def _save_valid(config: AppConfig, example_id: str = "train_0"):
     )
 
 
+def _complete_pilot(config: AppConfig) -> None:
+    _save_valid(config)
+    reveal_reference(config, "training", "train_0")
+    save_expected_guidance(
+        config,
+        "training",
+        "train_0",
+        "Give a concise synthetic next step.",
+    )
+
+
 def test_save_and_resume_without_data_loss(annotation_config: AppConfig):
     saved = _save_valid(annotation_config)
     resumed = AnnotationStore(annotation_config, "training").load()["train_0"]
@@ -267,6 +279,7 @@ def test_golden_view_excludes_model_suggestions(annotation_config: AppConfig):
     frame["model_prediction"] = "must never be shown"
     frame["model_confidence"] = 0.99
     frame.to_parquet(split_path, index=False)
+    _complete_pilot(annotation_config)
     freeze_guide(
         annotation_config,
         annotator_id="tester",
@@ -281,6 +294,14 @@ def test_golden_view_excludes_model_suggestions(annotation_config: AppConfig):
 def test_guide_freeze_gates_development_and_golden(annotation_config: AppConfig):
     with pytest.raises(AnnotationError, match="locked"):
         AnnotationStore(annotation_config, "development")
+    with pytest.raises(AnnotationError, match="training pilot is not ready"):
+        freeze_guide(
+            annotation_config,
+            annotator_id="tester",
+            confirm_taxonomy_version="spotify-intents-v0.1-proposed",
+            confirm_guide_version="spotify-annotation-v0.1-proposed",
+        )
+    _complete_pilot(annotation_config)
     state = freeze_guide(
         annotation_config,
         annotator_id="tester",
@@ -289,6 +310,37 @@ def test_guide_freeze_gates_development_and_golden(annotation_config: AppConfig)
     )
     assert state["status"] == "frozen"
     assert AnnotationStore(annotation_config, "development").load() == {}
+
+
+def test_training_extension_appends_without_replacing_initial_queue(
+    annotation_config: AppConfig, monkeypatch: pytest.MonkeyPatch
+):
+    import spotify_cares.annotation as annotation_module
+
+    split_dir = annotation_config.annotation.split_dir
+    larger_train = _synthetic_pool("train", 12)
+    _write_pool_and_references(split_dir, "train", larger_train)
+    train_hash = sha256_file(split_dir / OUTPUT_FILES["train_inputs"])
+    queue_path = annotation_paths(annotation_config.annotation.output_dir).queues / "training.parquet"
+    initial = pd.read_parquet(queue_path)
+    initial["candidate_pool_sha256"] = train_hash
+    initial.to_parquet(queue_path, index=False)
+    monkeypatch.setattr(
+        annotation_module,
+        "verify_preprocessing_prerequisites",
+        lambda config: {"manifest": {"output_sha256": {"train_inputs": train_hash}}},
+    )
+
+    result = extend_training_queue(
+        annotation_config,
+        batch_name="synthetic_more",
+        size=3,
+    )
+    extended = pd.read_parquet(queue_path)
+    assert result["first_queue_position"] == 3
+    assert list(extended.iloc[:2]["example_id"]) == list(initial["example_id"])
+    assert len(extended) == 5
+    assert set(extended.iloc[2:]["example_id"]).issubset(set(larger_train["example_id"]))
 
 
 def test_sampling_is_deterministic_and_golden_groups_are_separate():

@@ -11,6 +11,7 @@ def test_help_is_available(capsys):
     assert "validate-splits" in output
     assert "prepare-annotations" in output
     assert "validate-annotations" in output
+    assert "extend-training-queue" in output
     assert "freeze-guide" in output
 
 

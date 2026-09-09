@@ -43,7 +43,7 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-09
 - **Decision:** Put Streamlit in an optional `annotation` dependency group and keep package/CLI code independent of it.
 - **Rationale:** Annotation UI dependencies should not increase the cost or fragility of the required headless evaluation path.
-- **Stage 4 refinement (2026-09-10):** The UI reads through a package-level annotation store, starts every judgment blank, and reveals a historical reply only after the initial intent/escalation decision is persisted. A local hash-based freeze gates development and golden views. This keeps protocol enforcement testable without Streamlit and makes post-reference edits auditable.
+- **Stage 4 refinement (2026-09-10):** The UI reads through a package-level annotation store, starts every judgment blank, and reveals a historical reply only after the initial intent/escalation decision is persisted. A local hash-based freeze gates development and golden views and refuses to activate until the 30-item training pilot is complete under current hashes. This keeps protocol enforcement testable without Streamlit and makes post-reference edits auditable.
 
 ## D008 — Do not claim placeholder results
 
@@ -87,7 +87,7 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-09
 - **Decision:** Form exact keys from normalized unredacted customer text, generate near-copy candidates through rare character four-gram blocks, and union accepted links with conversation membership before splitting.
 - **Rationale:** Matching redacted text could make unrelated personal details collapse to the same placeholder. Rare deterministic blocks avoid an unrestricted all-pairs comparison, while combined groups keep repeated information on one side of evaluation.
-- **Stage 4 refinement (2026-09-10):** Annotation queues take at most one record per conversation and combined duplicate group. Golden selection fixes 150 hash-ranked random records first, then 50 records round-robin across predeclared observable challenge flags. This preserves a broad random stratum while testing difficult inputs without treating sampling flags as labels.
+- **Stage 4 refinement (2026-09-10):** Annotation queues take at most one record per conversation and combined duplicate group. Golden selection fixes 150 hash-ranked random records first, then 50 records round-robin across predeclared observable challenge flags. Named training-only extensions append new groups without replacing earlier queue entries. This preserves a broad random stratum, supports later coverage gaps, and never treats sampling flags as labels.
 
 ## D015 — Quarantine groups that cross strict chronological cutoffs
 

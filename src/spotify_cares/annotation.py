@@ -630,6 +630,16 @@ def prepare_annotation_queues(config: AppConfig) -> dict[str, Any]:
     paths.queues.mkdir(parents=True, exist_ok=True)
     paths.labels.mkdir(parents=True, exist_ok=True)
     paths.audit.mkdir(parents=True, exist_ok=True)
+    previous_manifest = (
+        json.loads(paths.manifest.read_text(encoding="utf-8"))
+        if paths.manifest.is_file()
+        else {}
+    )
+    previous_training = (
+        pd.read_parquet(paths.queues / "training.parquet")
+        if (paths.queues / "training.parquet").is_file()
+        else None
+    )
     pools = {
         split: pd.read_parquet(config.annotation.split_dir / OUTPUT_FILES[f"{split}_inputs"])
         for split in ("train", "development", "test_candidate")
@@ -657,6 +667,18 @@ def prepare_annotation_queues(config: AppConfig) -> dict[str, Any]:
             pool_hash=hashes["test_candidate_inputs"],
         ),
     }
+    initial_size = config.annotation.training_queue_size
+    if previous_training is not None and len(previous_training) > initial_size:
+        previous_initial = previous_training.iloc[:initial_size]
+        if list(previous_initial["example_id"].astype(str)) != list(
+            queues["training"]["example_id"].astype(str)
+        ):
+            raise AnnotationError(
+                "refusing to replace the labelled initial training queue; its deterministic IDs changed"
+            )
+        queues["training"] = pd.concat(
+            [queues["training"], previous_training.iloc[initial_size:]], ignore_index=True
+        )
     validation = validate_queues(
         queues,
         golden_random_size=config.annotation.golden_random_size,
@@ -681,7 +703,12 @@ def prepare_annotation_queues(config: AppConfig) -> dict[str, Any]:
     _atomic_parquet(examples, paths.taxonomy_examples)
 
     contract = current_contract(config)
-    if not paths.state.is_file():
+    existing_state = (
+        json.loads(paths.state.read_text(encoding="utf-8"))
+        if paths.state.is_file()
+        else None
+    )
+    if existing_state is None or existing_state.get("status") == "proposed":
         _atomic_json(
             paths.state,
             {
@@ -707,6 +734,9 @@ def prepare_annotation_queues(config: AppConfig) -> dict[str, Any]:
             "method": "topic-proxy coverage enrichment plus deterministic remainder",
             "natural_frequency_claim": False,
             "pilot_size": config.annotation.training_pilot_size,
+            "extensions": previous_manifest.get("training_sampling", {}).get(
+                "extensions", []
+            ),
         },
         "golden_sampling": {
             "random_target": config.annotation.golden_random_size,
@@ -726,6 +756,120 @@ def prepare_annotation_queues(config: AppConfig) -> dict[str, Any]:
     }
     _atomic_json(paths.manifest, manifest)
     return manifest
+
+
+def extend_training_queue(
+    config: AppConfig,
+    *,
+    batch_name: str,
+    size: int,
+    coverage_bucket: str | None = None,
+) -> dict[str, Any]:
+    """Append a reproducible training-only batch without replacing earlier IDs."""
+
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,31}", batch_name):
+        raise AnnotationError("batch_name must use 1-32 lowercase letters, numbers, '_' or '-'")
+    if size <= 0:
+        raise AnnotationError("extension size must be positive")
+    allowed_buckets = {name for name, _ in _COVERAGE_PATTERNS} | {
+        "short_or_context_limited",
+        "general",
+    }
+    if coverage_bucket is not None and coverage_bucket not in allowed_buckets:
+        raise AnnotationError(
+            f"unknown coverage bucket {coverage_bucket!r}; choose from {sorted(allowed_buckets)}"
+        )
+
+    prerequisite = verify_preprocessing_prerequisites(config)
+    paths = annotation_paths(config.annotation.output_dir)
+    if not paths.manifest.is_file() or not (paths.queues / "training.parquet").is_file():
+        raise AnnotationError("prepare the initial annotation queues before extending training")
+    manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
+    extensions = list(manifest.get("training_sampling", {}).get("extensions", []))
+    if any(item.get("batch_name") == batch_name for item in extensions):
+        raise AnnotationError(f"training extension {batch_name!r} already exists")
+
+    training = pd.read_parquet(paths.queues / "training.parquet")
+    pool_path = config.annotation.split_dir / OUTPUT_FILES["train_inputs"]
+    pool = pd.read_parquet(pool_path)
+    used_threads = set(training["thread_id"].astype(str))
+    used_groups = set(training["combined_group_id"].astype(str))
+    available = pool[
+        ~pool["thread_id"].astype(str).isin(used_threads)
+        & ~pool["combined_group_id"].astype(str).isin(used_groups)
+    ].copy()
+    if coverage_bucket is not None:
+        available["_coverage"] = available.apply(_coverage_bucket, axis=1)
+        available = available[available["_coverage"] == coverage_bucket]
+    rows = _eligible_ranked(
+        available,
+        seed=config.project.random_seed,
+        namespace=f"training-extension:{batch_name}:{coverage_bucket or 'all'}",
+    )
+    if len(rows) < size:
+        raise AnnotationError(
+            f"training extension shortfall: {len(rows)} eligible unique records for requested {size}"
+        )
+    stratum = f"extension:{batch_name}:{coverage_bucket or 'all'}"
+    rule = (
+        f"training-only deterministic hash rank within observable proxy {coverage_bucket}"
+        if coverage_bucket
+        else "training-only deterministic hash-ranked extension"
+    )
+    extension = _queue_frame(
+        rows[:size],
+        queue_name="training",
+        strata=[stratum] * size,
+        rules=[rule] * size,
+        pool_hash=prerequisite["manifest"]["output_sha256"]["train_inputs"],
+        seed=config.project.random_seed,
+    )
+    extension["queue_position"] += len(training)
+    combined = pd.concat([training, extension], ignore_index=True)
+    queues = {
+        "training": combined,
+        "development": pd.read_parquet(paths.queues / "development.parquet"),
+        "golden": pd.read_parquet(paths.queues / "golden.parquet"),
+    }
+    validation = validate_queues(
+        queues,
+        golden_random_size=config.annotation.golden_random_size,
+        golden_challenge_size=config.annotation.golden_challenge_size,
+    )
+    pools = {
+        "train": pool,
+        "development": pd.read_parquet(
+            config.annotation.split_dir / OUTPUT_FILES["development_inputs"]
+        ),
+        "test_candidate": pd.read_parquet(
+            config.annotation.split_dir / OUTPUT_FILES["test_candidate_inputs"]
+        ),
+    }
+    validate_queue_membership(queues, pools)
+    validate_queue_provenance(config, queues)
+    _atomic_parquet(combined, paths.queues / "training.parquet")
+
+    extension_record = {
+        "batch_name": batch_name,
+        "size": size,
+        "coverage_bucket": coverage_bucket,
+        "selection_rule": rule,
+        "first_queue_position": len(training) + 1,
+        "last_queue_position": len(combined),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    extensions.append(extension_record)
+    manifest["queue_validation"] = validation
+    manifest.setdefault("training_sampling", {})["extensions"] = extensions
+    manifest.setdefault("queue_sha256", {})["training"] = sha256_file(
+        paths.queues / "training.parquet"
+    )
+    _atomic_json(paths.manifest, manifest)
+    _append_jsonl(
+        paths.audit / "queue_changes.jsonl",
+        {"event": "training_queue_extended", **extension_record},
+    )
+    return extension_record
 
 
 def load_guide_state(config: AppConfig) -> dict[str, Any]:
@@ -773,6 +917,13 @@ def freeze_guide(
         raise AnnotationError("confirmed taxonomy version does not match the current taxonomy")
     if confirm_guide_version != contract["guide_version"]:
         raise AnnotationError("confirmed guide version does not match the current guide")
+    pilot = training_pilot_status(config)
+    if not pilot["ready_to_freeze"]:
+        raise AnnotationError(
+            "training pilot is not ready: "
+            f"{pilot['complete_current']}/{pilot['required']} current complete annotations; "
+            f"missing={pilot['missing']}, incomplete={pilot['incomplete']}, stale={pilot['stale']}"
+        )
     previous = load_guide_state(config)
     if previous.get("status") == "frozen":
         raise AnnotationError("guide is already frozen; no state change was made")
@@ -789,6 +940,45 @@ def freeze_guide(
         {"event": "guide_frozen", "before": previous, "after": state},
     )
     return state
+
+
+def training_pilot_status(config: AppConfig) -> dict[str, Any]:
+    """Report whether the first configured training items are complete and current."""
+
+    queue_path = _queue_path(config, "training")
+    if not queue_path.is_file():
+        raise AnnotationError("training queue is not prepared")
+    queue = pd.read_parquet(queue_path).sort_values("queue_position")
+    required = min(config.annotation.training_pilot_size, len(queue))
+    pilot_ids = list(queue.iloc[:required]["example_id"].astype(str))
+    records = AnnotationStore(config, "training", enforce_access=False).load()
+    contract = current_contract(config)
+    missing = sum(example_id not in records for example_id in pilot_ids)
+    incomplete = sum(
+        example_id in records and records[example_id].status != "complete"
+        for example_id in pilot_ids
+    )
+    stale = sum(
+        example_id in records
+        and any(getattr(records[example_id], key) != value for key, value in contract.items())
+        for example_id in pilot_ids
+    )
+    complete_current = sum(
+        example_id in records
+        and records[example_id].status == "complete"
+        and not any(
+            getattr(records[example_id], key) != value for key, value in contract.items()
+        )
+        for example_id in pilot_ids
+    )
+    return {
+        "required": required,
+        "complete_current": complete_current,
+        "missing": missing,
+        "incomplete": incomplete,
+        "stale": stale,
+        "ready_to_freeze": complete_current == required,
+    }
 
 
 def _queue_path(config: AppConfig, queue_name: str) -> Path:

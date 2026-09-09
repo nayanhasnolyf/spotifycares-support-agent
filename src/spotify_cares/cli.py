@@ -77,6 +77,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CONFIG,
         help=f"configuration file (default: {DEFAULT_CONFIG})",
     )
+    extend_training_parser = commands.add_parser(
+        "extend-training-queue",
+        help="append a reproducible training-only annotation batch",
+    )
+    extend_training_parser.add_argument("--name", required=True, dest="batch_name")
+    extend_training_parser.add_argument("--size", required=True, type=int)
+    extend_training_parser.add_argument(
+        "--coverage-bucket",
+        help="optional observable proxy bucket; this is not an intent label",
+    )
+    extend_training_parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG,
+        help=f"configuration file (default: {DEFAULT_CONFIG})",
+    )
     status_parser = commands.add_parser(
         "guide-status", help="show the local annotation-guide checkpoint state"
     )
@@ -215,6 +231,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"saved={counts['judgment_saved']}, skipped={counts['skipped_incomplete']}, "
                 f"missing={counts['missing']}, stale={counts['stale_requires_human_review']}"
             )
+        return 0
+
+    if args.command == "extend-training-queue":
+        from spotify_cares.annotation import extend_training_queue
+        from spotify_cares.config import load_config
+
+        result = extend_training_queue(
+            load_config(args.config),
+            batch_name=args.batch_name,
+            size=args.size,
+            coverage_bucket=args.coverage_bucket,
+        )
+        print(f"training batch: {result['batch_name']}")
+        print(f"examples appended: {result['size']}")
+        print(
+            f"queue positions: {result['first_queue_position']}-"
+            f"{result['last_queue_position']}"
+        )
         return 0
 
     if args.command == "guide-status":

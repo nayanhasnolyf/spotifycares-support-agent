@@ -83,7 +83,10 @@ view = get_annotation_view(config, queue_name, example_id)
 st.subheader(f"{queue_name.title()} {position + 1} / {len(queue)}")
 st.code(example_id)
 if existing:
-    st.caption(f"Saved status: {existing.status}; revision {existing.revision}")
+    st.caption(
+        f"Saved status: {existing.status}; revision {existing.revision}; "
+        f"annotated at {existing.annotation_timestamp.isoformat()}"
+    )
 
 left, right = st.columns(2)
 with left:
@@ -144,7 +147,9 @@ with right:
             "Annotation notes",
             value=existing.annotation_notes if existing else "",
         )
-        save_judgment = st.form_submit_button("Save judgment")
+        save_judgment = st.form_submit_button(
+            "Save edits" if existing else "Save judgment"
+        )
     if save_judgment:
         try:
             save_initial_judgment(
