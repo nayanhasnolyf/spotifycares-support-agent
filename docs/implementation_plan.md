@@ -46,7 +46,9 @@ Inspect only the 400-message training discovery sample, propose a compact taxono
 
 Implemented: nine proposed intents have inclusion/exclusion rules, training example IDs, local ignored redacted examples, and difficult-boundary rules; all 12 Stage 3 output hashes and nine leakage checks pass; the annotation UI and validators are usable; queues contain 300 training, 80 development, and exactly 200 golden examples with 150/50 strata and group separation. The freeze gate requires 30 complete, current pilot annotations. Reproducible named training-only extensions can later be appended without replacing prior queue entries.
 
-Still required for Stage 4 completion: the project owner must review the proposal, genuinely label the 30-item training pilot, resolve or accept recorded ambiguities, and explicitly freeze the taxonomy/escalation/guide contract. Tool readiness is not human-labelling completion.
+Still required for Stage 4 completion: the project owner must review the pilot findings, resolve or accept recorded ambiguities, assess missing topic boundaries, and explicitly freeze the accepted taxonomy/escalation/guide contract. Tool readiness and a complete record count do not establish annotation independence or adequate pilot coverage.
+
+Pilot review checkpoint (2026-09-11): 30/30 pilot records are complete/current, with 270 further training, 80 development, and 200 golden annotations outstanding. The owner reports some ChatGPT assistance; the assisted subset is unknown, so this pilot does not establish independent human labelling. Assistant review found a security-heavy pilot caused by consecutive sampling buckets, three marked ambiguous cases, and reason/flag/guidance issues for human adjudication. See `docs/training_pilot_review.md` for exact proposed guide additions and a 20-record supplemental review proposal drawn from existing training-queue metadata. The guide remains proposed; existing labels, guide hashes, queues, and freeze state are preserved. Completion count alone is not enough to recommend freezing.
 
 ## Stage 5 — Golden-set annotation (blocked on Stage 4 human freeze)
 
