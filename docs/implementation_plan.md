@@ -50,6 +50,12 @@ Still required for Stage 4 completion: the project owner must review the pilot f
 
 Pilot review checkpoint (2026-09-11): 30/30 pilot records are complete/current, with 270 further training, 80 development, and 200 golden annotations outstanding. The owner reports some ChatGPT assistance; the assisted subset is unknown, so this pilot does not establish independent human labelling. Assistant review found a security-heavy pilot caused by consecutive sampling buckets, three marked ambiguous cases, and reason/flag/guidance issues for human adjudication. See `docs/training_pilot_review.md` for exact proposed guide additions and a 20-record supplemental review proposal drawn from existing training-queue metadata. The guide remains proposed; existing labels, guide hashes, queues, and freeze state are preserved. Completion count alone is not enough to recommend freezing.
 
+Stage 4 review continuation: the local annotation app now has a Coverage review
+view of the 20 agreed existing training records, pinned by stable ID. It shares
+the original training label store and preserves queue order. One-at-a-time case
+adjudication, owner decisions on proposed guide wording, and post-review coverage
+validation remain pending. The active guide has not been revised or frozen.
+
 ## Stage 5 — Golden-set annotation (blocked on Stage 4 human freeze)
 
 Randomly select and genuinely hand-label a target of 200 examples (allowed range: 150–250). Preserve stable IDs and provenance. Double-label a subset to measure agreement and adjudicate disagreements without producing model predictions for the golden set.

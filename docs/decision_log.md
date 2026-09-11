@@ -58,6 +58,7 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Rationale:** Human labels and evaluation examples may reproduce customer text. Opt-in tracking makes an accidental personal-data commit less likely while preserving a path to version safe, permitted artifacts later.
 - **Stage 4 refinement (2026-09-10):** Queue Parquet, label CSV, audit JSONL, local freeze state, and redacted taxonomy examples all live under ignored `data/labels/annotation`. The committed taxonomy contains stable derived example IDs but no customer text; real redacted examples are joined locally for review.
 - **Pilot review refinement (2026-09-11):** Record the owner's ChatGPT-assistance disclosure in a separate, fingerprinted local provenance declaration and an aggregate review document, preserving every judgment. The assisted subset is unknown; do not present this pilot as independent human labelling. Keep case IDs and detailed case review local, and keep proposed policy edits separate from the active guide so review alone does not make annotations stale.
+- **Coverage navigation refinement (2026-09-11):** Pin the agreed review IDs in an ignored local selection file and present them as a view over the existing training queue. Reuse the same audited label store and reject changed ID/position mappings. This makes the supplemental review accessible without duplicating records, reordering the queue, or presenting sampling proxies as inferred intents.
 
 ## D010 — Normalize tracked text files to LF
 

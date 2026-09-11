@@ -38,3 +38,29 @@ uv run --extra annotation streamlit run app/annotation_app.py
 ```
 
 The checked-in Streamlit configuration binds to `127.0.0.1` and disables usage telemetry. It does not deploy the application.
+
+## Coverage review navigation
+
+In the local app choose **Queue: training**, then **Training view: Coverage review**.
+The example selector jumps directly to any of the 20 agreed training records and
+shows its original queue position and stable ID. Back, Next, and Resume first
+incomplete operate within this view. Full queue retains the original training
+order; both views edit the same training CSV through the existing audited store.
+
+The local, ignored `data/labels/annotation/coverage_review.json` pins the IDs
+resolved from positions 31–32, 55–56, 82–83, 109–110, 136–137, 163–164,
+190–191, 217–218, 244–245, and 271–272 before navigation was implemented.
+The selector verifies that each ID remains at its recorded position. A missing
+or moved ID is reported instead of silently selecting a replacement. The source
+queue fingerprint records the original selection; appending later training rows
+does not invalidate unchanged pinned IDs. This file is local review material and
+is not distributed with the repository. If missing, Coverage review displays its
+expected path; the ordinary Full queue view remains available.
+
+Sampling proxies are not displayed as proposed answers. Unsaved judgments remain
+blank and future replies follow the existing reveal gate. Navigation itself
+creates no labels, rewrites no queue, and changes no provenance. Existing local
+assistance declarations and audit records remain intact. Changes arising from
+the conversational pilot review require the owner's decision for each case;
+assistant suggestions do not authorize edits. Final ambiguity and intent-coverage
+validation is pending completion of that human review.

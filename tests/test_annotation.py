@@ -387,3 +387,92 @@ def test_stale_guide_versions_are_flagged(annotation_config: AppConfig):
     )
     report = validate_annotation_outputs(annotation_config)
     assert report["annotations"]["training"]["stale_requires_human_review"] == 1
+
+
+def _synthetic_review_selection(config: AppConfig, examples=None) -> Path:
+    path = config.annotation.output_dir / "coverage_review.json"
+    path.write_text(json.dumps({
+        "schema_version": 1,
+        "queue_name": "training",
+        "name": "Synthetic coverage review",
+        "source_queue_sha256": "0" * 64,
+        "purpose": "Synthetic navigation fixture only",
+        "examples": examples or [
+            {"original_position": 2, "example_id": "train_1"},
+            {"original_position": 1, "example_id": "train_0"},
+        ],
+    }), encoding="utf-8")
+    return path
+
+
+def test_review_view_preserves_queue_order_and_rejects_retargeting(annotation_config):
+    from spotify_cares.review_navigation import coverage_review_view
+
+    path = _synthetic_review_selection(annotation_config)
+    queue_path = annotation_paths(annotation_config.annotation.output_dir).queues / "training.parquet"
+    queue = pd.read_parquet(queue_path)
+    original = queue.copy(deep=True)
+    result = coverage_review_view(queue, path)
+    assert result.example_id.tolist() == ["train_0", "train_1"]
+    pd.testing.assert_frame_equal(queue, original)
+    changed = queue.copy()
+    changed.loc[0, "example_id"] = "replacement"
+    with pytest.raises(AnnotationError, match="missing or its original position changed"):
+        coverage_review_view(changed, path)
+    changed = queue.copy()
+    changed["queue_name"] = "golden"
+    with pytest.raises(AnnotationError, match="only for the training"):
+        coverage_review_view(changed, path)
+    _synthetic_review_selection(annotation_config, [
+        {"original_position": 1, "example_id": "train_0"},
+        {"original_position": 2, "example_id": "train_0"},
+    ])
+    with pytest.raises(AnnotationError, match="duplicate IDs"):
+        coverage_review_view(queue, path)
+
+
+def test_coverage_app_navigation_saves_original_record(annotation_config, monkeypatch):
+    """Exercise selection, blank fields, save, and back/next with synthetic data."""
+    pytest.importorskip("streamlit")
+    from streamlit.testing.v1 import AppTest
+    import spotify_cares.config as config_module
+
+    monkeypatch.setattr(config_module, "load_config", lambda _: annotation_config)
+    _synthetic_review_selection(annotation_config)
+    paths = annotation_paths(annotation_config.annotation.output_dir)
+    queue_hash = sha256_file(paths.queues / "training.parquet")
+    app = AppTest.from_file(Path("app/annotation_app.py").resolve()).run(timeout=15)
+    assert not app.exception
+
+    def widget(kind, label):
+        return next(item for item in getattr(app, kind) if item.label == label)
+
+    widget("radio", "Training view").set_value("Coverage review").run()
+    assert not app.exception
+    widget("selectbox", "Coverage review example").select("train_1").run()
+    assert "Original training position 2" in app.subheader[0].value
+    assert widget("selectbox", "Primary intent").value is None
+    assert widget("radio", "Should a human handle this case under the written policy?").value is None
+    assert widget("radio", "Ambiguity").value is None
+    assert AnnotationStore(annotation_config, "training").load() == {}
+
+    widget("text_input", "Annotator ID").set_value("synthetic_tester")
+    widget("selectbox", "Primary intent").select("other_or_unclear")
+    widget("radio", "Should a human handle this case under the written policy?").set_value("no")
+    widget("radio", "Ambiguity").set_value("clear")
+    widget("button", "Save judgment").click().run()
+    assert not app.exception
+    saved = AnnotationStore(annotation_config, "training").load()
+    assert set(saved) == {"train_1"}
+    assert saved["train_1"].queue_name == "training"
+    assert saved["train_1"].reference_revealed is False
+    assert (paths.audit / "training.jsonl").is_file()
+    widget("button", "Back").click().run()
+    assert widget("selectbox", "Coverage review example").value == "train_0"
+    assert widget("selectbox", "Primary intent").value is None
+    widget("button", "Next").click().run()
+    assert widget("selectbox", "Coverage review example").value == "train_1"
+    assert widget("selectbox", "Primary intent").value == "other_or_unclear"
+    widget("button", "Resume first incomplete").click().run()
+    assert widget("selectbox", "Coverage review example").value == "train_0"
+    assert sha256_file(paths.queues / "training.parquet") == queue_hash

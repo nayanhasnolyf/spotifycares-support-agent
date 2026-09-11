@@ -17,6 +17,7 @@ from spotify_cares.annotation import (
     skip_example,
 )
 from spotify_cares.config import load_config
+from spotify_cares.review_navigation import coverage_review_view
 
 
 CONFIG_PATH = Path("configs/project.yaml")
@@ -55,9 +56,50 @@ except AnnotationError as error:
     st.error(str(error))
     st.stop()
 
-state_key = f"position_{queue_name}"
+review_mode = "Full queue"
+if queue_name == "training":
+    review_mode = st.sidebar.radio(
+        "Training view", ["Full queue", "Coverage review"]
+    )
+    if review_mode == "Coverage review":
+        try:
+            queue = coverage_review_view(
+                queue, config.annotation.output_dir / "coverage_review.json"
+            )
+        except AnnotationError as error:
+            st.error(str(error))
+            st.stop()
+        st.sidebar.caption(
+            "Selected existing training examples. Coverage groups are sampling "
+            "proxies, not verified intents. Saves use the original training records."
+        )
+
+state_key = f"position_{queue_name}_{review_mode}"
 if state_key not in st.session_state:
     st.session_state[state_key] = 0
+
+if review_mode == "Coverage review":
+    review_ids = queue["example_id"].astype(str).tolist()
+    original_positions = dict(zip(review_ids, queue["queue_position"]))
+    choice_key = "coverage_review_example"
+    st.session_state[choice_key] = review_ids[
+        min(st.session_state[state_key], len(review_ids) - 1)
+    ]
+
+    def select_coverage_example():
+        st.session_state[state_key] = review_ids.index(st.session_state[choice_key])
+
+    st.sidebar.selectbox(
+        "Coverage review example",
+        review_ids,
+        key=choice_key,
+        format_func=lambda value: f"Training #{original_positions[value]} · {value}",
+        on_change=select_coverage_example,
+    )
+    completed = sum(
+        value in records and records[value].status == "complete" for value in review_ids
+    )
+    st.sidebar.caption(f"Coverage review: {completed}/{len(review_ids)} complete")
 
 controls = st.columns([1, 1, 2, 4])
 if controls[0].button("Back", disabled=st.session_state[state_key] <= 0):
@@ -80,7 +122,13 @@ example_id = str(queue_row["example_id"])
 existing = records.get(example_id)
 view = get_annotation_view(config, queue_name, example_id)
 
-st.subheader(f"{queue_name.title()} {position + 1} / {len(queue)}")
+if review_mode == "Coverage review":
+    st.subheader(
+        f"Coverage review {position + 1} / {len(queue)} "
+        f"· Original training position {queue_row['queue_position']}"
+    )
+else:
+    st.subheader(f"{queue_name.title()} {position + 1} / {len(queue)}")
 st.code(example_id)
 if existing:
     st.caption(
