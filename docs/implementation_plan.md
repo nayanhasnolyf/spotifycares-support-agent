@@ -93,6 +93,19 @@ Follow-up verification: 65 synthetic tests passed; both actual machine-output
 validators report structurally clean but incomplete empty runs; 37 protected
 local artifact hashes were preserved outside the intended freeze-state/audit writes.
 
+Latest machine-run checkpoint: the owner's five-example live training smoke test
+was validated against the frozen guide, taxonomy, prompt, model, queue, and input
+hashes. Resuming through the existing CLI without `--limit` added six successful
+records, then stopped on HTTP 429. Training now has 11 validated successes, one
+unresolved provider failure, and 258 unattempted examples (259 still need labels).
+Development generation was not started against the same rate/quota limit and
+remains 0/80. Both validators report incomplete outputs. The original five records
+remain byte-for-byte unchanged and each appears once. All 39 protected local
+artifact hashes, including human annotations, frozen policy state, golden queue,
+and split assignments, are unchanged. All 30 human annotations remain stale.
+The machine-workflow test module passed 26 synthetic tests. No code, policy,
+classifier, or evaluation changes were made to work around the provider limit.
+
 ## Stage 5 — Golden-set annotation (freeze satisfied; human work outstanding)
 
 Randomly select and genuinely hand-label a target of 200 examples (allowed range: 150–250). Preserve stable IDs and provenance. Double-label a subset to measure agreement and adjudicate disagreements without producing model predictions for the golden set.

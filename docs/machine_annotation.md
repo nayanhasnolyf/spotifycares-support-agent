@@ -52,8 +52,9 @@ The [official model page](https://ai.google.dev/gemini-api/docs/models/gemini-2.
 lists this stable model and structured-output support; the [schema documentation](https://ai.google.dev/gemini-api/docs/generate-content/structured-output)
 documents enums, objects, arrays, nullable fields, and additional-properties rules.
 The installed SDK accepts the implemented schema configuration in synthetic tests.
-Account-specific model access and actual schema acceptance remain unverified without
-credentials. `--model` is an optional explicit override of project configuration.
+Account-specific model access and schema acceptance have since been exercised by
+the live smoke test and continuation below; rate/quota capacity remains a blocker.
+`--model` is an optional explicit override of project configuration.
 Configure
 `GEMINI_API_KEY` locally in ignored `.env`, never in chat or a command argument.
 The CLI does not implicitly load `.env`; uv can load it with `--env-file`.
@@ -117,7 +118,7 @@ No real machine-output files were created. The key was absent from the process
 environment and no local `.env` existed at verification. Approval/freeze, a model
 ID, and locally configured credentials were required before a live run.
 
-## Current live-run blocker
+## Historical preparation blocker (superseded by live continuation below)
 
 Freeze has since succeeded and the model is configured. Credential checks found
 no key in the process environment, no user-scope Gemini key, and no existing `.env`.
@@ -144,3 +145,50 @@ earlier successes. The 37 protected local files outside the intended freeze stat
 and freeze audit retained identical hashes. Frozen guide/taxonomy hashes match;
 the pilot still reports 30 stale, zero current, zero missing/incomplete records.
 The five-example live test remains blocked, not passed.
+
+## Latest live continuation: incomplete after HTTP 429
+
+The owner's five training smoke-test successes were verified from actual stored
+JSONL, not inferred from the reported counts. All five match the current run's
+frozen contract, input fingerprints, model, prompt, and schema. Their IDs were
+absent from the 265 pending IDs selected by the existing resume logic.
+
+After inspecting CLI help, the full-run command was:
+
+```powershell
+uv run --env-file .env spotify-cares machine-annotate --queue training
+```
+
+It saved six new successes and one failed attempt, then stopped on HTTP 429.
+The saved error identifies rate/quota limiting but does not identify which limit
+or its reset time. No immediate retry or development API request was made after
+the error. There was no policy/prompt/model change and no fabricated response.
+
+| Queue | Validated successes | Unresolved failures | Human records protected | Not attempted | Remaining labels |
+|---|---:|---:|---:|---:|---:|
+| Training | 11 | 1 | 30 | 258 | 259 |
+| Development | 0 | 0 | 0 | 80 | 80 |
+
+Both output validators returned incomplete (exit 1), not a completed generation
+stage. All 12 training events are `machine_annotated`. The original five-record
+byte prefix is unchanged and each original ID occurs exactly once. All 39
+protected local artifact hashes are unchanged, including all human annotation
+and assistance history, freeze state, golden queue, and split assignments. The
+30 prior-version human annotations still report stale. The machine-workflow
+test module passed 26 tests using synthetic fixtures and fake providers only.
+Schema/provenance validation does not establish semantic accuracy. No classifier
+training or evaluation occurred; future development comparisons remain model
+agreement, not independent human accuracy.
+
+After resolving the rate/quota limit, resume training with the command above;
+it will skip the 11 successes and retry the failed example. Then run development
+and validate both queues:
+
+```powershell
+uv run --env-file .env spotify-cares machine-annotate --queue development
+uv run spotify-cares validate-machine-annotations --queue training
+uv run spotify-cares validate-machine-annotations --queue development
+```
+
+Do not repeatedly rerun against an unresolved limit. Generated JSONL and the
+credential file stay local and Git-ignored; no golden messages were read.

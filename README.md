@@ -2,7 +2,7 @@
 
 This repository is the staged implementation of a Hiver SDE Intern take-home assignment. It will use real SpotifyCares conversations from Kaggle's `thoughtvector/customer-support-on-twitter` dataset to classify support intents, retrieve relevant historical conversations, draft grounded replies, and decide whether each case can be auto-handled or needs a human.
 
-Stages 1 through 3 are complete. The owner-approved v0.2 policy is frozen locally and separate machine-annotation tooling is ready. The 30 completed, partly AI-assisted training annotations retain their older versions and remain stale, not silently re-reviewed; 270 training, 80 development, and 200 golden labels remain missing. Live generation is blocked by absent Gemini credentials; the model is configured as `gemini-2.5-flash`. No machine generation, classifier training, or evaluation has run. All source-derived text remains Git-ignored. See [the frozen-policy and machine workflow](docs/machine_annotation.md).
+Stages 1 through 3 are complete. The owner-approved v0.2 policy is frozen locally. The 30 completed, partly AI-assisted training annotations retain their older versions and remain stale, not silently re-reviewed. Live `gemini-2.5-flash` annotation has 11 validated machine-labelled training examples, one failed attempt (HTTP 429), and 258 unattempted examples; development remains 0/80 and golden remains human-only and untouched. Generation is incomplete and paused on rate/quota limiting. No classifier training or evaluation has run. All source-derived text remains Git-ignored. See [the frozen-policy and machine workflow](docs/machine_annotation.md).
 
 ## Quick start
 
