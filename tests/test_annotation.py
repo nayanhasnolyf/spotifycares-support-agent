@@ -119,6 +119,7 @@ def annotation_config(tmp_path: Path) -> AppConfig:
             "golden_random_size": 1,
             "golden_challenge_size": 1,
             "training_pilot_size": 1,
+            "machine_rate": base.annotation.machine_rate.model_copy(update={"request_interval_seconds": 0}),
         }
     )
     config = base.model_copy(update={"annotation": settings})

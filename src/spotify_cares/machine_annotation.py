@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from collections import deque
 from datetime import datetime, timezone
 import hashlib
 from importlib.metadata import version
 import json
 import os
+import random
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -19,6 +22,7 @@ from spotify_cares.annotation import (
     load_taxonomy, sha256_file, _append_jsonl,
 )
 from spotify_cares.config import AppConfig
+from spotify_cares.rate_limits import RateEvidence, extract_rate_evidence, retry_wait
 
 PROMPT_PATH = Path("configs/machine_annotation_prompt.txt")
 ALLOWED_QUEUES = ("training", "development")
@@ -76,6 +80,8 @@ class MachineRecord(BaseModel):
     error_code: Literal["provider_error", "invalid_output", "empty_output"] | None
     response_model_version: str | None = None
     provider_http_status: int | None = Field(default=None, ge=100, le=599)
+    rate_limit_evidence: RateEvidence | None = None
+    request_controls: dict | None = None
 
     @model_validator(mode="after")
     def consistent(self):
@@ -228,13 +234,16 @@ class GeminiProvider:
         self.client.close()
 
 
-def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH, limit=None, provider=None):
+def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH, limit=None, provider=None,
+                     retry_unknown_quota=False):
     if limit is not None and limit < 1:
         raise AnnotationError("limit must be positive")
     queue, pool, taxonomy, system, schema, provenance, path = prepare_run(
         config, queue_name, model, prompt_path
     )
     model = provenance["model"]
+    rate = config.annotation.machine_rate
+    halt_reason = None
     with run_lock(path):
         human_store = AnnotationStore(config, queue_name)
         humans = human_store.load()
@@ -251,22 +260,65 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
                 "not retried. Correct the configuration and inspect the local run before recovery."
             )
         pending = [eid for eid in missing if eid not in latest or latest[eid].status != "success"]
+        for eid, previous in latest.items():
+            if eid not in missing or previous.status != "failure":
+                continue
+            evidence = previous.rate_limit_evidence
+            if evidence and evidence.category in {"daily", "billing", "quota_unavailable"}:
+                raise AnnotationError(f"saved {evidence.category} limit requires quota/account review; not retried")
+            if previous.provider_http_status == 429 and (evidence is None or evidence.category == "unknown") and not retry_unknown_quota:
+                raise AnnotationError("saved HTTP 429 has unknown quota/delay; check project quota before explicitly using --retry-unknown-quota")
         pending = pending[:limit] if limit is not None else pending
         inputs = read_inputs(pool, set(pending) | (set(latest) & set(missing)))
         for eid, event in latest.items():
             if eid in inputs and event.input_sha256 != digest(inputs[eid]):
                 raise AnnotationError("saved input fingerprint mismatch")
         owned_provider = provider is None and bool(pending)
+        # Pacing changes preserve the run hash; successes are never regenerated.
+        for eid in pending:
+            previous = latest.get(eid)
+            evidence = previous.rate_limit_evidence if previous else None
+            if evidence and evidence.retry_not_before:
+                wait = max(0, (evidence.retry_not_before - datetime.now(timezone.utc)).total_seconds())
+                if wait > rate.max_single_wait_seconds or wait > rate.max_total_retry_wait_seconds:
+                    raise AnnotationError(f"server retry wait is still {wait:.1f}s; defer and resume later")
         if owned_provider:
             provider = GeminiProvider()
         try:
-            for eid in pending:
+            work = deque(pending)
+            retries, waited, calls, last_started = {}, 0.0, 0, None
+            if events:
+                elapsed = max(0, (datetime.now(timezone.utc) - max(e.timestamp for e in events)).total_seconds())
+                last_started = time.monotonic() - elapsed
+            while work and (limit is None or calls < limit):
+                eid = work.popleft()
+                previous = latest.get(eid)
+                evidence = previous.rate_limit_evidence if previous else None
+                wait = 0.0
+                if previous and previous.status == "failure" and evidence and evidence.category == "temporary":
+                    wait = retry_wait(rate, max(0, retries.get(eid, 0) - 1), evidence,
+                                      datetime.now(timezone.utc), random.uniform(0, rate.jitter_seconds))
+                elif evidence and evidence.retry_not_before:
+                    wait = max(0, (evidence.retry_not_before - datetime.now(timezone.utc)).total_seconds())
+                if last_started is not None:
+                    wait = max(wait, rate.request_interval_seconds - (time.monotonic() - last_started))
+                if wait > rate.max_single_wait_seconds or (
+                    evidence and evidence.category == "temporary" and waited + wait > rate.max_total_retry_wait_seconds
+                ):
+                    halt_reason = f"retry wait {wait:.1f}s exceeds configured wait budget; resume later"
+                    break
+                if wait > 0:
+                    time.sleep(wait)
+                    if evidence and evidence.category == "temporary":
+                        waited += wait
                 assert_queue_access(config, "development")
                 if current_contract(config) != {k: provenance[k] for k in current_contract(config)}:
                     raise AnnotationError("guide changed during generation")
                 if human_store.load() != humans:
                     raise AnnotationError("human annotations changed; resume to recompute missing IDs")
-                decision, error, resolved_model, http_status = None, None, None, None
+                decision, error, resolved_model, http_status, rate_evidence = None, None, None, None, None
+                last_started = time.monotonic()
+                calls += 1
                 try:
                     raw, resolved_model = provider(model=model, system=system, schema=schema, message=inputs[eid])
                 except Exception as exc:
@@ -275,6 +327,7 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
                     from google.genai.errors import APIError
                     if isinstance(exc, APIError) and isinstance(exc.code, int) and 100 <= exc.code <= 599:
                         http_status = exc.code
+                        rate_evidence = extract_rate_evidence(exc, http_status)
                 else:
                     if not raw:
                         error = "empty_output"
@@ -301,14 +354,26 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
                     status="failure" if error else "success", decision=decision,
                     error_code=error, response_model_version=resolved_model,
                     provider_http_status=http_status,
+                    rate_limit_evidence=rate_evidence,
+                    request_controls={"scheduler_version": "bounded-rate-v1", **rate.model_dump(),
+                                      "unknown_quota_retry_confirmed": retry_unknown_quota},
                 )
                 _append_jsonl(path, record.model_dump(mode="json"))
+                latest[eid] = record
                 if error == "provider_error":
-                    break  # stop on auth/model/quota/transport errors; preserve earlier successes
+                    if http_status == 429 and rate_evidence and rate_evidence.category == "temporary" and retries.get(eid, 0) < rate.max_retries:
+                        retries[eid] = retries.get(eid, 0) + 1
+                        work.appendleft(eid)
+                        continue
+                    category = rate_evidence.category if rate_evidence else "unknown"
+                    halt_reason = f"provider error HTTP {http_status}; {category}; no further automatic requests"
+                    break
         finally:
             if owned_provider:
                 provider.close()
-    return validate_machine_annotations(config, queue_name, model=model, prompt_path=prompt_path)
+    report = validate_machine_annotations(config, queue_name, model=model, prompt_path=prompt_path)
+    report["halt_reason"] = halt_reason
+    return report
 
 
 def validate_machine_annotations(config, queue_name, *, model=None, prompt_path=PROMPT_PATH):
@@ -334,7 +399,8 @@ def validate_machine_annotations(config, queue_name, *, model=None, prompt_path=
         "superseded_by_human": len(set(latest) & set(humans)),
         "provider_failures": [
             {"example_id": eid, "http_status": latest[eid].provider_http_status,
-             "permanent": latest[eid].provider_http_status in PERMANENT_HTTP_ERRORS}
+             "permanent": latest[eid].provider_http_status in PERMANENT_HTTP_ERRORS,
+             "rate_limit_evidence": latest[eid].rate_limit_evidence.model_dump(mode="json") if latest[eid].rate_limit_evidence else None}
             for eid in sorted(failures) if latest[eid].error_code == "provider_error"
         ],
         "complete": successes == missing,

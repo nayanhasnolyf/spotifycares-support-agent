@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StrictModel(BaseModel):
@@ -60,6 +60,22 @@ class PreprocessingSettings(StrictModel):
         return self
 
 
+class MachineRateSettings(StrictModel):
+    request_interval_seconds: float = Field(default=0, ge=0, le=60)
+    max_retries: int = Field(default=2, ge=0, le=5)
+    initial_backoff_seconds: float = Field(default=5, gt=0, le=60)
+    max_backoff_seconds: float = Field(default=30, gt=0, le=60)
+    jitter_seconds: float = Field(default=1, ge=0, le=10)
+    max_single_wait_seconds: float = Field(default=30, ge=0, le=60)
+    max_total_retry_wait_seconds: float = Field(default=60, ge=0, le=120)
+
+    @model_validator(mode="after")
+    def ordered_backoff(self):
+        if self.initial_backoff_seconds > self.max_backoff_seconds:
+            raise ValueError("initial backoff cannot exceed maximum backoff")
+        return self
+
+
 class AnnotationSettings(StrictModel):
     taxonomy_path: Path
     guide_path: Path
@@ -71,6 +87,7 @@ class AnnotationSettings(StrictModel):
     golden_challenge_size: int
     training_pilot_size: int
     machine_model: str | None = None
+    machine_rate: MachineRateSettings = Field(default_factory=MachineRateSettings)
 
     @model_validator(mode="after")
     def validate_sizes(self) -> "AnnotationSettings":

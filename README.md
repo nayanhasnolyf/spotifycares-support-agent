@@ -4,6 +4,11 @@ This repository is the staged implementation of a Hiver SDE Intern take-home ass
 
 Stages 1 through 3 are complete. The owner-approved v0.2 policy is frozen locally. The 30 completed, partly AI-assisted training annotations retain their older versions and remain stale, not silently re-reviewed. Live `gemini-2.5-flash` annotation has 11 validated machine-labelled training examples, one failed attempt (HTTP 429), and 258 unattempted examples; development remains 0/80 and golden remains human-only and untouched. Generation is incomplete and paused on rate/quota limiting. No classifier training or evaluation has run. All source-derived text remains Git-ignored. See [the frozen-policy and machine workflow](docs/machine_annotation.md).
 
+The saved 429 lacks quota and retry details, so its limit type/reset time is unknown.
+The runner now captures safe quota evidence and supports paced, bounded temporary
+retries. No new API requests were made during diagnosis. Check quota availability
+before explicitly retrying that old error; do not assume billing action is needed.
+
 ## Quick start
 
 Prerequisites: [uv](https://docs.astral.sh/uv/) and network access for the first dependency install.

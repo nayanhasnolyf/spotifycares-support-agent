@@ -126,6 +126,8 @@ def build_parser() -> argparse.ArgumentParser:
         machine_parser.add_argument("--prompt", type=Path, default=Path("configs/machine_annotation_prompt.txt"))
         if command == "machine-annotate":
             machine_parser.add_argument("--limit", type=int, help="maximum attempts this invocation; rerun to resume")
+            machine_parser.add_argument("--retry-unknown-quota", action="store_true",
+                                        help="explicitly retry a saved ambiguous 429 after checking quota; no automatic unknown-limit retries")
     return parser
 
 
@@ -141,7 +143,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         try:
             operation = machine_annotate if args.command == "machine-annotate" else validate_machine_annotations
-            options = {"limit": args.limit} if args.command == "machine-annotate" else {}
+            options = {"limit": args.limit, "retry_unknown_quota": args.retry_unknown_quota} if args.command == "machine-annotate" else {}
             report = operation(load_config(args.config), args.queue, model=args.model,
                                prompt_path=args.prompt, **options)
         except AnnotationError as error:

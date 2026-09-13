@@ -48,6 +48,14 @@ annotation:
   golden_challenge_size: 50
   training_pilot_size: 30
   machine_model: gemini-2.5-flash
+  machine_rate:
+    request_interval_seconds: 10
+    max_retries: 2
+    initial_backoff_seconds: 5
+    max_backoff_seconds: 30
+    jitter_seconds: 1
+    max_single_wait_seconds: 30
+    max_total_retry_wait_seconds: 60
 
 artifacts:
   directory: artifacts

@@ -68,11 +68,12 @@ uv run spotify-cares validate-machine-annotations --queue development
 ```
 
 Rerun the same generation command to resume. `--limit` bounds attempts, not total
-queue size. Each pending example gets one attempt per invocation. Provider errors
-stop the invocation immediately, preserving successes. HTTP 400/401/403/404/405/410/422
+queue size. The limit counts all API attempts, including bounded retries. Provider
+errors stop the invocation except for identified temporary 429s handled by the
+bounded scheduler below. HTTP 400/401/403/404/405/410/422
 failures are recorded and block automatic retries even on rerun; correct the
-configuration and inspect the local run before explicit recovery. Other failed
-attempts may retry on a later invocation. SDK retries are disabled.
+configuration and inspect the local run before explicit recovery. Unknown 429s
+require an explicit quota-availability check before a retry. SDK retries are disabled.
 Validation needs no credentials but still requires matching frozen files.
 Exit 0 means all missing IDs have valid machine records; exit 1 means incomplete
 coverage or unresolved failures; exit 2 means a gate/configuration/integrity error.
@@ -180,7 +181,9 @@ Schema/provenance validation does not establish semantic accuracy. No classifier
 training or evaluation occurred; future development comparisons remain model
 agreement, not independent human accuracy.
 
-After resolving the rate/quota limit, resume training with the command above;
+After resolving the rate/quota limit, see the diagnostic continuation below for
+the explicit acknowledgement required for the old unknown 429; do not blindly rerun.
+Resume training with that command;
 it will skip the 11 successes and retry the failed example. Then run development
 and validate both queues:
 
@@ -192,3 +195,59 @@ uv run spotify-cares validate-machine-annotations --queue development
 
 Do not repeatedly rerun against an unresolved limit. Generated JSONL and the
 credential file stay local and Git-ignored; no golden messages were read.
+
+## Saved 429 diagnosis and bounded scheduling
+
+The original failed event contains HTTP 429, `provider_error`, timestamp, input ID,
+and provenance, but no error body, quota metric/ID, retry delay, or response headers.
+The old runner discarded those details. Consequently the saved evidence cannot
+distinguish request-per-minute, token, daily, or billing limits, and cannot establish
+that any retry interval has elapsed. No new API requests were made to diagnose it.
+Do not infer billing activation, a quota upgrade, or a reset time from this record.
+
+Check the affected project's active limits and usage through the
+[official rate-limit guidance](https://ai.google.dev/gemini-api/docs/rate-limits).
+That is a read-only diagnostic step, not an instruction to enable billing, rotate
+keys, or switch models. The unknown saved error does not establish a specific
+account action beyond checking which limit was reached and whether it is available.
+After confirming quota availability, explicitly retry the still-eligible failed
+example using the unchanged model/prompt/policy run:
+
+```powershell
+uv run --env-file .env spotify-cares machine-annotate --queue training --retry-unknown-quota
+```
+
+The flag acknowledges only a saved ambiguous 429. It does not create an automatic
+unknown-error retry loop or bypass explicit daily/billing/permanent-error stops.
+Once training succeeds, run development without the acknowledgement flag, then
+validate both queues. Existing successes remain skipped; no failed example is
+marked complete or excluded to bypass a quota error.
+
+Scheduling settings are under `annotation.machine_rate` in `configs/project.yaml`:
+10 seconds between request starts, at most two automatic retries per example,
+5-second exponential base capped at 30 seconds with up to 1 second of jitter,
+30-second maximum individual wait, and 60 seconds total retry-wait budget per run.
+These are conservative operational defaults, not inferred project quota values.
+Each request records its scheduler settings without changing the run hash or
+regenerating existing labels. Changes do not alter the frozen policy, model,
+generation settings, prompt, input IDs, or existing output bytes.
+
+Future SDK errors retain only allowlisted quota metric/ID/value, recognized reason
+codes, parsed `RetryInfo.retryDelay`, and parsed HTTP `Retry-After`. Arbitrary error
+messages, project dimensions, response bodies, and other headers are not logged.
+Generic wording about checking billing is not treated as proof of a billing error.
+Server-provided delay is a minimum: the scheduler never truncates it to fit a cap.
+A long wait is deferred without another request; persisted retry deadlines also
+apply on resume. Known daily limits, zero quota, and explicit billing reasons stop
+cleanly even if a short retry hint is present. Unknown limits stop for review.
+Temporary errors alone receive bounded exponential backoff with jitter.
+
+References: Google's [RetryInfo contract](https://docs.cloud.google.com/storage/docs/reference/rpc/google.rpc#retryinfo)
+and [Gemini API errors](https://ai.google.dev/gemini-api/docs/api-errors).
+The rate handler and legacy-record compatibility are exercised with synthetic
+errors, fake providers, and fake sleeps; no live quota behavior is claimed as tested.
+Verification: 82 tests passed. All 40 protected local artifact hashes, including
+the complete existing machine JSONL, human records, assistance history, frozen
+state, golden queue, and split assignments, are unchanged. Both actual output
+validators still report 11/270 training successes and 0/80 development successes
+under the same run hashes; this diagnosis did not spend quota or refresh labels.

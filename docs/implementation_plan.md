@@ -106,6 +106,18 @@ and split assignments, are unchanged. All 30 human annotations remain stale.
 The machine-workflow test module passed 26 synthetic tests. No code, policy,
 classifier, or evaluation changes were made to work around the provider limit.
 
+Quota-diagnosis follow-up: the saved 429 retained no quota metric, delay, or error
+details, so its limit category and reset time remain unknown. No further API calls
+were made. Added allowlisted quota/retry evidence capture and configurable pacing,
+bounded exponential backoff with jitter for identified temporary limits, and clean
+daily/billing/long-wait stops. Scheduling metadata is separate from the label run
+identity, preserving the 11 successes and failed example's retry eligibility.
+An explicit quota-availability acknowledgement is required before retrying the
+legacy unknown 429. Training remains 11 successes / 1 failure / 258 unattempted;
+development remains 0 successes / 0 failures / 80 unattempted. No classifier work.
+Verification: 82 tests passed; CLI help and compilation checks passed; all 40
+protected local artifact hashes (including machine output) remain unchanged.
+
 ## Stage 5 — Golden-set annotation (freeze satisfied; human work outstanding)
 
 Randomly select and genuinely hand-label a target of 200 examples (allowed range: 150–250). Preserve stable IDs and provenance. Double-label a subset to measure agreement and adjudicate disagreements without producing model predictions for the golden set.

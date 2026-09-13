@@ -285,7 +285,8 @@ def test_http_failures_stop_and_permanent_failures_are_not_retried(annotation_co
         assert len(calls) == 1
     else:
         # Only an explicit subsequent invocation retries transient failures.
-        resumed = machine_annotate(annotation_config, 'training', model='synthetic', provider=fake)
+        resumed = machine_annotate(annotation_config, 'training', model='synthetic', provider=fake,
+                                   retry_unknown_quota=(status == 429))
         assert resumed['complete']
 
 
