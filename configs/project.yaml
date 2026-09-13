@@ -47,6 +47,7 @@ annotation:
   golden_random_size: 150
   golden_challenge_size: 50
   training_pilot_size: 30
+  machine_model: gemini-2.5-flash
 
 artifacts:
   directory: artifacts

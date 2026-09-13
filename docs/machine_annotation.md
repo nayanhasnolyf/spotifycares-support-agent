@@ -1,11 +1,18 @@
 # Policy approval and machine annotation
 
-## Awaiting final approval
+## Approved and frozen locally
 
 Active versions are `spotify-intents-v0.2-proposed` and
 `spotify-annotation-v0.2-proposed`. Read the active guide, then run
-`uv run spotify-cares guide-status` to see its exact hashes and checkpoint mismatch.
-No local freeze state has been rewritten during consolidation.
+`uv run spotify-cares guide-status` to see its exact hashes and matching checkpoint.
+The owner subsequently approved and froze these exact versions using annotator
+`NAYAN` and `--acknowledge-prior-version-pilot`. The version suffix and guide's
+original proposal wording remain unchanged to preserve the approved hashes;
+the local freeze manifest, not a rewrite of those files, records approval.
+
+Frozen taxonomy SHA-256: `15809663951befd9688aae18c301d85f159d3d95d22e153ce754f949b9b7a688`.
+Frozen guide SHA-256: `3cc6c56f8b954e12000eeec501d1bdd4b1f1a6a123a53aa10faf7868e27016c3`.
+All 30 existing annotations remain prior-version records and stale.
 
 The consolidated rules are: current unresolved request rather than history;
 resolved acknowledgements use other/unclear; unavailable links supply no evidence;
@@ -24,7 +31,7 @@ coverage cannot establish correctness across every intent. The 20 optional cover
 examples are not a new prerequisite. Final approval accepts these limitations,
 not independent human labelling or row-level re-review.
 
-After explicit owner approval only (not run during this stage):
+Executed once after explicit owner approval (do not repeat an existing freeze):
 
 ```powershell
 uv run spotify-cares freeze-guide `
@@ -40,22 +47,31 @@ queue preparation merely to update a policy version.
 
 ## Generation and validation commands (after freeze only)
 
-Use an explicitly chosen Gemini model ID; none is silently selected. Configure
+`configs/project.yaml` now selects `annotation.machine_model: gemini-2.5-flash`.
+The [official model page](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash)
+lists this stable model and structured-output support; the [schema documentation](https://ai.google.dev/gemini-api/docs/generate-content/structured-output)
+documents enums, objects, arrays, nullable fields, and additional-properties rules.
+The installed SDK accepts the implemented schema configuration in synthetic tests.
+Account-specific model access and actual schema acceptance remain unverified without
+credentials. `--model` is an optional explicit override of project configuration.
+Configure
 `GEMINI_API_KEY` locally in ignored `.env`, never in chat or a command argument.
 The CLI does not implicitly load `.env`; uv can load it with `--env-file`.
 No live API call or model-quality claim has been verified in this stage.
 
 ```powershell
 uv run spotify-cares machine-annotate --help
-uv run --env-file .env spotify-cares machine-annotate --queue training --model YOUR_GEMINI_MODEL_ID --limit 10
-uv run --env-file .env spotify-cares machine-annotate --queue development --model YOUR_GEMINI_MODEL_ID --limit 10
-uv run spotify-cares validate-machine-annotations --queue training --model YOUR_GEMINI_MODEL_ID
-uv run spotify-cares validate-machine-annotations --queue development --model YOUR_GEMINI_MODEL_ID
+uv run --env-file .env spotify-cares machine-annotate --queue training --limit 5
+uv run spotify-cares validate-machine-annotations --queue training
+uv run spotify-cares validate-machine-annotations --queue development
 ```
 
 Rerun the same generation command to resume. `--limit` bounds attempts, not total
-queue size. Each pending example gets one attempt per invocation; explicit failed
-attempts retry on a later invocation. No retry loop incurs unbounded spend.
+queue size. Each pending example gets one attempt per invocation. Provider errors
+stop the invocation immediately, preserving successes. HTTP 400/401/403/404/405/410/422
+failures are recorded and block automatic retries even on rerun; correct the
+configuration and inspect the local run before explicit recovery. Other failed
+attempts may retry on a later invocation. SDK retries are disabled.
 Validation needs no credentials but still requires matching frozen files.
 Exit 0 means all missing IDs have valid machine records; exit 1 means incomplete
 coverage or unresolved failures; exit 2 means a gate/configuration/integrity error.
@@ -99,4 +115,32 @@ worked; all 38 protected local files (annotations, review provenance, state,
 queues, and split assignments) retained their SHA-256 hashes.
 No real machine-output files were created. The key was absent from the process
 environment and no local `.env` existed at verification. Approval/freeze, a model
-ID, and locally configured credentials are required before a live run.
+ID, and locally configured credentials were required before a live run.
+
+## Current live-run blocker
+
+Freeze has since succeeded and the model is configured. Credential checks found
+no key in the process environment, no user-scope Gemini key, and no existing `.env`.
+A new ignored placeholder file was created at
+`C:\Users\nayan\OneDrive\Documents\Spotify_Cares\.env`.
+Open that file in your editor and set `GEMINI_API_KEY` locally. Never paste it into
+chat, put it in a command argument, or stage the file. The CLI loads it only when
+uv receives `--env-file .env`.
+
+No API request or five-example smoke test has run yet. Current validation reports
+training: 0 generated, 0 failed, 30 protected human records, 270 not attempted;
+development: 0 generated, 0 failed, 0 protected records, 80 not attempted.
+Empty-output validation is structurally clean but incomplete (exit 1), not a
+successful smoke test. Golden data is untouched. No classifier has been trained.
+After configuring credentials, run the five-example command above. Inspect and
+validate the five actual outputs and resume behavior before expanding
+within the already authorized workflow. Only then run the same command without
+`--limit` for training and development. Machine-labelled development results must
+remain labelled model agreement, never human accuracy.
+
+Preparation verification: 65 synthetic tests passed, including configuration
+selection, stop-on-provider-error, permanent-error retry prevention, and preserving
+earlier successes. The 37 protected local files outside the intended freeze state
+and freeze audit retained identical hashes. Frozen guide/taxonomy hashes match;
+the pilot still reports 30 stale, zero current, zero missing/incomplete records.
+The five-example live test remains blocked, not passed.

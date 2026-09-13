@@ -23,6 +23,7 @@ from spotify_cares.config import AppConfig
 PROMPT_PATH = Path("configs/machine_annotation_prompt.txt")
 ALLOWED_QUEUES = ("training", "development")
 GENERATION_SETTINGS = {"temperature": 0, "max_output_tokens": 2048}
+PERMANENT_HTTP_ERRORS = {400, 401, 403, 404, 405, 410, 422}
 
 
 def canonical(value) -> str:
@@ -74,6 +75,7 @@ class MachineRecord(BaseModel):
     decision: MachineDecision | None
     error_code: Literal["provider_error", "invalid_output", "empty_output"] | None
     response_model_version: str | None = None
+    provider_http_status: int | None = Field(default=None, ge=100, le=599)
 
     @model_validator(mode="after")
     def consistent(self):
@@ -98,13 +100,14 @@ def validate_decision(decision: MachineDecision, taxonomy) -> None:
         raise ValueError("unknown risk flag")
 
 
-def prepare_run(config: AppConfig, queue_name: str, model: str, prompt_path: Path):
+def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_path: Path):
     # Check before any queue, label, or input reads, including training.
     if queue_name not in ALLOWED_QUEUES:
         raise AnnotationError("machine annotation permits only training/development")
     assert_queue_access(config, "development")  # matching frozen policy for both queues
-    if not model.strip():
-        raise AnnotationError("an explicit Gemini model ID is required")
+    model = model if model is not None else config.annotation.machine_model
+    if not model or not model.strip():
+        raise AnnotationError("configure annotation.machine_model or supply --model")
     contract = current_contract(config)
     taxonomy = load_taxonomy(config.annotation.taxonomy_path)
     queue_path = config.annotation.output_dir / "queues" / f"{queue_name}.parquet"
@@ -127,7 +130,7 @@ def prepare_run(config: AppConfig, queue_name: str, model: str, prompt_path: Pat
         taxonomy.model_dump()
     ) + "\nGUIDE\n" + config.annotation.guide_path.read_text(encoding="utf-8")
     provenance = {
-        "workflow_version": "machine-annotation-v1", "model": model,
+        "workflow_version": "machine-annotation-v2", "model": model,
         "google_genai_version": version("google-genai"),
         **contract, "prompt_template_sha256": sha256_file(prompt_path),
         "prompt_sha256": digest(system), "response_schema_sha256": digest(schema),
@@ -225,12 +228,13 @@ class GeminiProvider:
         self.client.close()
 
 
-def machine_annotate(config, queue_name, *, model, prompt_path=PROMPT_PATH, limit=None, provider=None):
+def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH, limit=None, provider=None):
     if limit is not None and limit < 1:
         raise AnnotationError("limit must be positive")
     queue, pool, taxonomy, system, schema, provenance, path = prepare_run(
         config, queue_name, model, prompt_path
     )
+    model = provenance["model"]
     with run_lock(path):
         human_store = AnnotationStore(config, queue_name)
         humans = human_store.load()
@@ -239,12 +243,19 @@ def machine_annotate(config, queue_name, *, model, prompt_path=PROMPT_PATH, limi
         if any(e.queue_name != queue_name for e in events):
             raise AnnotationError("machine queue mismatch")
         missing = [eid for eid in queue.example_id if eid not in humans]
-        inputs = read_inputs(pool, missing)
+        permanent = [e for eid, e in latest.items() if eid in missing
+                     and e.status == "failure" and e.provider_http_status in PERMANENT_HTTP_ERRORS]
+        if permanent:
+            raise AnnotationError(
+                f"recorded permanent provider error HTTP {permanent[0].provider_http_status}; "
+                "not retried. Correct the configuration and inspect the local run before recovery."
+            )
+        pending = [eid for eid in missing if eid not in latest or latest[eid].status != "success"]
+        pending = pending[:limit] if limit is not None else pending
+        inputs = read_inputs(pool, set(pending) | (set(latest) & set(missing)))
         for eid, event in latest.items():
             if eid in inputs and event.input_sha256 != digest(inputs[eid]):
                 raise AnnotationError("saved input fingerprint mismatch")
-        pending = [eid for eid in missing if eid not in latest or latest[eid].status != "success"]
-        pending = pending[:limit] if limit is not None else pending
         owned_provider = provider is None and bool(pending)
         if owned_provider:
             provider = GeminiProvider()
@@ -255,11 +266,15 @@ def machine_annotate(config, queue_name, *, model, prompt_path=PROMPT_PATH, limi
                     raise AnnotationError("guide changed during generation")
                 if human_store.load() != humans:
                     raise AnnotationError("human annotations changed; resume to recompute missing IDs")
-                decision, error, resolved_model = None, None, None
+                decision, error, resolved_model, http_status = None, None, None, None
                 try:
                     raw, resolved_model = provider(model=model, system=system, schema=schema, message=inputs[eid])
-                except Exception:
+                except Exception as exc:
                     error = "provider_error"
+                    # Never persist or print exception text, which may echo credentials/input.
+                    from google.genai.errors import APIError
+                    if isinstance(exc, APIError) and isinstance(exc.code, int) and 100 <= exc.code <= 599:
+                        http_status = exc.code
                 else:
                     if not raw:
                         error = "empty_output"
@@ -285,15 +300,18 @@ def machine_annotate(config, queue_name, *, model, prompt_path=PROMPT_PATH, limi
                     attempt=latest[eid].attempt + 1 if eid in latest else 1,
                     status="failure" if error else "success", decision=decision,
                     error_code=error, response_model_version=resolved_model,
+                    provider_http_status=http_status,
                 )
                 _append_jsonl(path, record.model_dump(mode="json"))
+                if error == "provider_error":
+                    break  # stop on auth/model/quota/transport errors; preserve earlier successes
         finally:
             if owned_provider:
                 provider.close()
     return validate_machine_annotations(config, queue_name, model=model, prompt_path=prompt_path)
 
 
-def validate_machine_annotations(config, queue_name, *, model, prompt_path=PROMPT_PATH):
+def validate_machine_annotations(config, queue_name, *, model=None, prompt_path=PROMPT_PATH):
     queue, pool, taxonomy, _, _, provenance, path = prepare_run(config, queue_name, model, prompt_path)
     humans = AnnotationStore(config, queue_name).load()
     events = load_events(path)
@@ -301,7 +319,7 @@ def validate_machine_annotations(config, queue_name, *, model, prompt_path=PROMP
     if any(event.queue_name != queue_name for event in events):
         raise AnnotationError("machine queue mismatch")
     missing = set(queue.example_id) - set(humans)
-    inputs = read_inputs(pool, missing)
+    inputs = read_inputs(pool, missing & set(latest))
     for eid, event in latest.items():
         if eid in inputs and event.input_sha256 != digest(inputs[eid]):
             raise AnnotationError("saved input fingerprint mismatch")
@@ -314,6 +332,11 @@ def validate_machine_annotations(config, queue_name, *, model, prompt_path=PROMP
         "validated_successes": len(successes), "unresolved_failures": len(failures),
         "not_attempted": len(missing - set(latest)),
         "superseded_by_human": len(set(latest) & set(humans)),
+        "provider_failures": [
+            {"example_id": eid, "http_status": latest[eid].provider_http_status,
+             "permanent": latest[eid].provider_http_status in PERMANENT_HTTP_ERRORS}
+            for eid in sorted(failures) if latest[eid].error_code == "provider_error"
+        ],
         "complete": successes == missing,
         "interpretation": "machine-label validation only; development scores would be model agreement, not independent human accuracy",
     }

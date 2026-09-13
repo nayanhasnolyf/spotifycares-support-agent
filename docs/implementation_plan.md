@@ -79,7 +79,21 @@ Verification: 57 tests passed using synthetic fixtures/fake providers; CLI help
 and active contract/staleness reporting worked; all 38 protected local artifact
 hashes were unchanged. No generation or freeze was executed.
 
-## Stage 5 — Golden-set annotation (blocked on Stage 4 human freeze)
+Live-annotation preparation follow-up: the owner approved v0.2 and its limited
+pilot coverage. The exact hashes were frozen through the existing audited workflow
+with `NAYAN`; all 30 older labels remain stale and unchanged. The central config
+now selects the documented structured-output model `gemini-2.5-flash`. Generation
+stops on provider errors and refuses automatic retries of recorded permanent HTTP
+errors. No API key was available; an ignored empty `.env` placeholder is ready for
+local editing. The five-example training smoke test and subsequent 270 training /
+80 development generation remain blocked, with zero generated and zero failed
+attempts. No training or evaluation ran. This supersedes the earlier pending-freeze
+status, not the historical verification record above.
+Follow-up verification: 65 synthetic tests passed; both actual machine-output
+validators report structurally clean but incomplete empty runs; 37 protected
+local artifact hashes were preserved outside the intended freeze-state/audit writes.
+
+## Stage 5 — Golden-set annotation (freeze satisfied; human work outstanding)
 
 Randomly select and genuinely hand-label a target of 200 examples (allowed range: 150–250). Preserve stable IDs and provenance. Double-label a subset to measure agreement and adjudicate disagreements without producing model predictions for the golden set.
 

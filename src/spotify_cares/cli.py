@@ -122,7 +122,7 @@ def build_parser() -> argparse.ArgumentParser:
         machine_parser = commands.add_parser(command, help="frozen-policy machine labels, never golden")
         machine_parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
         machine_parser.add_argument("--queue", choices=("training", "development"), required=True)
-        machine_parser.add_argument("--model", required=True, help="explicit Gemini model ID; no implicit model selection")
+        machine_parser.add_argument("--model", help="override annotation.machine_model from project configuration")
         machine_parser.add_argument("--prompt", type=Path, default=Path("configs/machine_annotation_prompt.txt"))
         if command == "machine-annotate":
             machine_parser.add_argument("--limit", type=int, help="maximum attempts this invocation; rerun to resume")

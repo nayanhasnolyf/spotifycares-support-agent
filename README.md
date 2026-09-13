@@ -2,7 +2,7 @@
 
 This repository is the staged implementation of a Hiver SDE Intern take-home assignment. It will use real SpotifyCares conversations from Kaggle's `thoughtvector/customer-support-on-twitter` dataset to classify support intents, retrieve relevant historical conversations, draft grounded replies, and decide whether each case can be auto-handled or needs a human.
 
-Stages 1 through 3 are complete. Stage 4 has a revised v0.2 policy and separate machine-annotation tooling awaiting final guide approval/freeze. The 30 completed, partly AI-assisted training annotations retain their older versions and are now stale, not silently re-reviewed; 270 training, 80 development, and 200 golden labels remain missing. No machine generation, classifier training, or evaluation has run. All source-derived text remains Git-ignored. See [the approval and machine workflow](docs/machine_annotation.md).
+Stages 1 through 3 are complete. The owner-approved v0.2 policy is frozen locally and separate machine-annotation tooling is ready. The 30 completed, partly AI-assisted training annotations retain their older versions and remain stale, not silently re-reviewed; 270 training, 80 development, and 200 golden labels remain missing. Live generation is blocked by absent Gemini credentials; the model is configured as `gemini-2.5-flash`. No machine generation, classifier training, or evaluation has run. All source-derived text remains Git-ignored. See [the frozen-policy and machine workflow](docs/machine_annotation.md).
 
 ## Quick start
 
@@ -102,8 +102,8 @@ Only the 400 redacted training discovery messages were inspected to propose thes
 | Queue | Size | Construction | Current label state |
 |---|---:|---|---|
 | Training | 300 | Topic-proxy coverage enrichment plus deterministic remainder | 30 completed under v0.1, stale under v0.2 |
-| Development | 80 | Deterministic hash-ranked sample | Locked; 0 complete |
-| Golden | 200 | 150 random plus 50 challenge | Locked; 0 complete |
+| Development | 80 | Deterministic hash-ranked sample | Freeze gate satisfied; 0 complete |
+| Golden | 200 | 150 random plus 50 challenge | Human-only; 0 complete |
 
 Every queue has unique conversation and combined duplicate-group IDs. The golden challenge stratum has 10 selections for each predeclared flag: very short text, missing context, multiple question clauses, security wording, and account-specific payment-dispute wording. These are selection flags—not intent or escalation labels. There is no cross-queue example overlap. The training coverage sample is intentionally enriched and must not be used as an estimate of natural intent frequencies.
 
@@ -117,7 +117,7 @@ uv run --extra annotation streamlit run app/annotation_app.py
 
 The app binds to `http://127.0.0.1:8501` by default and does not deploy. Labels are saved atomically as CSV under `data/labels/annotation/labels/`; queues, audit JSONL, hashes, local state, and redacted taxonomy examples live beside them and are also ignored.
 
-The flagged pilot review is complete. The next action is final approval of `docs/annotation_guide.md` v0.2, acknowledging limited coverage and unchanged older label versions. The 20-example Coverage review is optional, not a new prerequisite. Only after explicitly accepting the guide should the owner run:
+The flagged pilot review is complete. The owner approved and froze v0.2, acknowledging limited coverage and unchanged older label versions. The 20-example Coverage review is optional, not a new prerequisite. The following workflow was executed once; do not repeat an existing freeze:
 
 ```bash
 uv run spotify-cares freeze-guide \
@@ -127,7 +127,7 @@ uv run spotify-cares freeze-guide \
   --acknowledge-prior-version-pilot
 ```
 
-The default freeze gate requires a complete/current pilot. The explicit acknowledgement above accepts a complete prior-version pilot and records its staleness without editing labels. Missing/incomplete records still block freeze. Freezing records the current hashes and unlocks human development/golden annotation; machine generation never accepts golden. It is not automatic and has not happened yet.
+The default freeze gate requires a complete/current pilot. The explicit acknowledgement above accepts a complete prior-version pilot and records its staleness without editing labels. Missing/incomplete records still block freeze. Freezing records the current hashes and unlocks human development/golden annotation; machine generation never accepts golden. The next action is configuring the ignored `.env` locally and running the five-example training smoke test documented in `docs/machine_annotation.md`.
 
 If the genuinely labelled training set later lacks coverage, append a named training-only batch without replacing the initial 300 or any existing extension:
 

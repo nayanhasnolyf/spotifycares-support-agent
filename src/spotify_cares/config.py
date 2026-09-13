@@ -70,6 +70,7 @@ class AnnotationSettings(StrictModel):
     golden_random_size: int
     golden_challenge_size: int
     training_pilot_size: int
+    machine_model: str | None = None
 
     @model_validator(mode="after")
     def validate_sizes(self) -> "AnnotationSettings":

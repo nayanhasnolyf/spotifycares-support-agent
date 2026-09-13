@@ -13,6 +13,7 @@ def test_project_config_names_final_brand():
     assert config.annotation.taxonomy_path == Path("configs/taxonomy.yaml")
     assert config.annotation.golden_random_size == 150
     assert config.annotation.golden_challenge_size == 50
+    assert config.annotation.machine_model == "gemini-2.5-flash"
 
 
 def test_required_storage_formats_are_explicit():

@@ -251,3 +251,53 @@ def test_new_prompt_and_model_have_distinct_runs(annotation_config, tmp_path):
     third = machine_annotate(annotation_config, "training", model="synthetic", provider=fake, prompt_path=prompt)
     assert third["run_sha256"] != first["run_sha256"]
     assert Path(first["path"]).is_file() and Path(second["path"]).is_file()
+
+
+def test_configured_model_used_without_cli_override(annotation_config):
+    _complete_pilot(annotation_config)
+    freeze(annotation_config)
+    def configured(**kwargs):
+        assert kwargs['model'] == annotation_config.annotation.machine_model
+        return fake(**kwargs)
+    report = machine_annotate(annotation_config, 'training', provider=configured)
+    assert report['complete']
+    assert load_events(Path(report['path']))[0].provenance['model'] == 'gemini-2.5-flash'
+
+
+@pytest.mark.parametrize('status', [400, 401, 403, 404, 429, 500])
+def test_http_failures_stop_and_permanent_failures_are_not_retried(annotation_config, status):
+    from google.genai.errors import APIError
+    _complete_pilot(annotation_config)
+    freeze(annotation_config)
+    # Synthetic fixture only: make two entries eligible to prove stop-on-error.
+    AnnotationStore(annotation_config, 'training').label_path.unlink()
+    calls = []
+    def fail(**kwargs):
+        calls.append(kwargs['message']['example_id'])
+        raise APIError(status, {'error': {'message': 'SYNTHETIC_SECRET'}})
+    report = machine_annotate(annotation_config, 'training', model='synthetic', provider=fail)
+    assert len(calls) == 1 and report['not_attempted'] == 1
+    assert report['provider_failures'][0]['http_status'] == status
+    assert 'SYNTHETIC_SECRET' not in Path(report['path']).read_text(encoding='utf-8')
+    if status in {400, 401, 403, 404}:
+        with pytest.raises(AnnotationError, match='not retried'):
+            machine_annotate(annotation_config, 'training', model='synthetic', provider=fail)
+        assert len(calls) == 1
+    else:
+        # Only an explicit subsequent invocation retries transient failures.
+        resumed = machine_annotate(annotation_config, 'training', model='synthetic', provider=fake)
+        assert resumed['complete']
+
+
+def test_successes_preserved_when_later_provider_request_fails(annotation_config):
+    from google.genai.errors import APIError
+    _complete_pilot(annotation_config)
+    freeze(annotation_config)
+    AnnotationStore(annotation_config, 'training').label_path.unlink()
+    first = machine_annotate(annotation_config, 'training', model='synthetic', provider=fake, limit=1)
+    saved = Path(first['path']).read_bytes()
+    def fail(**kwargs):
+        raise APIError(403, {'error': {'message': 'Synthetic denied request'}})
+    report = machine_annotate(annotation_config, 'training', model='synthetic', provider=fail)
+    assert report['validated_successes'] == 1 and report['unresolved_failures'] == 1
+    assert Path(report['path']).read_bytes().startswith(saved)
