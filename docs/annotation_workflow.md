@@ -62,5 +62,13 @@ blank and future replies follow the existing reveal gate. Navigation itself
 creates no labels, rewrites no queue, and changes no provenance. Existing local
 assistance declarations and audit records remain intact. Changes arising from
 the conversational pilot review require the owner's decision for each case;
-assistant suggestions do not authorize edits. Final ambiguity and intent-coverage
-validation is pending completion of that human review.
+assistant suggestions do not authorize edits. The flagged pilot review is now
+complete; four uncertainties remain explicitly recorded. Coverage review remains
+optional (0/20 at policy consolidation), not a new freeze prerequisite.
+
+The active v0.2 policy leaves existing human labels under their original versions.
+They are reported stale until individually re-reviewed. Final approval may use an
+explicit prior-version-pilot acknowledgement without changing any row. Separate
+machine-label commands and their freeze, privacy, and validation gates are documented
+in [machine_annotation.md](machine_annotation.md). Machine output is never loaded
+into the human annotation UI or counted as human completion.

@@ -2,7 +2,7 @@
 
 This repository is the staged implementation of a Hiver SDE Intern take-home assignment. It will use real SpotifyCares conversations from Kaggle's `thoughtvector/customer-support-on-twitter` dataset to classify support intents, retrieve relevant historical conversations, draft grounded replies, and decide whether each case can be auto-handled or needs a human.
 
-Stages 1 through 3 are complete, and Stage 4's proposed taxonomy, local annotation tooling, and deterministic queues are ready. The guide has **not** been approved or frozen, and all 580 queue entries remain unlabelled. All source-derived text remains Git-ignored. No classifier has been trained and no model-evaluation result is claimed.
+Stages 1 through 3 are complete. Stage 4 has a revised v0.2 policy and separate machine-annotation tooling awaiting final guide approval/freeze. The 30 completed, partly AI-assisted training annotations retain their older versions and are now stale, not silently re-reviewed; 270 training, 80 development, and 200 golden labels remain missing. No machine generation, classifier training, or evaluation has run. All source-derived text remains Git-ignored. See [the approval and machine workflow](docs/machine_annotation.md).
 
 ## Quick start
 
@@ -26,7 +26,7 @@ On PowerShell, use `Copy-Item .env.example .env` instead. The `.env` file and ra
 ## Current CLI
 
 ```text
-usage: spotify-cares [-h] [--version] {config,extract,preprocess,validate-splits,prepare-annotations,validate-annotations,extend-training-queue,guide-status,freeze-guide} ...
+usage: spotify-cares [-h] [--version] {config,extract,preprocess,validate-splits,prepare-annotations,validate-annotations,extend-training-queue,guide-status,freeze-guide,machine-annotate,validate-machine-annotations} ...
 
 SpotifyCares support-agent project tools.
 ```
@@ -87,7 +87,7 @@ The final Stage 3 run completed in 136.6 seconds and produced:
 | Held-out test candidates | 5,172 | 2017-11-25 22:28:46 to 2017-12-03 22:56:04 |
 | Quarantined | 3,514 | Combined groups spanning a chronological cutoff |
 
-All 41,339 Stage 2 examples passed structural revalidation. The target fractions were 70%/15%/15%, but exact ratios were not forced: conversation and duplicate groups remain indivisible, and boundary-spanning groups are quarantined. The test-candidate pool is large enough to support a later 200-example golden set; it has not been selected or labelled.
+All 41,339 Stage 2 examples passed structural revalidation. The target fractions were 70%/15%/15%, but exact ratios were not forced: conversation and duplicate groups remain indivisible, and boundary-spanning groups are quarantined. Stage 4 subsequently selected a 200-example golden queue from the test-candidate pool; its human labels remain outstanding.
 
 The duplicate audit found 165 exact groups covering 775 examples and 145 conservative near-duplicate groups covering 360 representatives from 280 accepted links. Near matching evaluated 252,967 blocked candidates, while 425 messages shorter than 20 characters participated only in exact matching. The largest conversation-plus-duplicate group contains 624 examples across 129 threads; it was kept intact. Transitive grouping can be broader than any one pair, which is a known conservative risk.
 
@@ -101,7 +101,7 @@ Only the 400 redacted training discovery messages were inspected to propose thes
 
 | Queue | Size | Construction | Current label state |
 |---|---:|---|---|
-| Training | 300 | Topic-proxy coverage enrichment plus deterministic remainder | 0 complete |
+| Training | 300 | Topic-proxy coverage enrichment plus deterministic remainder | 30 completed under v0.1, stale under v0.2 |
 | Development | 80 | Deterministic hash-ranked sample | Locked; 0 complete |
 | Golden | 200 | 150 random plus 50 challenge | Locked; 0 complete |
 
@@ -117,16 +117,17 @@ uv run --extra annotation streamlit run app/annotation_app.py
 
 The app binds to `http://127.0.0.1:8501` by default and does not deploy. Labels are saved atomically as CSV under `data/labels/annotation/labels/`; queues, audit JSONL, hashes, local state, and redacted taxonomy examples live beside them and are also ignored.
 
-The next action is manual: read `docs/annotation_guide.md`, use only the training queue for a 30-item pilot, and record ambiguous boundaries in notes. Revise the proposed guide if the pilot exposes problems. Only after explicitly accepting the guide should the owner run:
+The flagged pilot review is complete. The next action is final approval of `docs/annotation_guide.md` v0.2, acknowledging limited coverage and unchanged older label versions. The 20-example Coverage review is optional, not a new prerequisite. Only after explicitly accepting the guide should the owner run:
 
 ```bash
 uv run spotify-cares freeze-guide \
   --annotator-id YOUR_ID \
-  --confirm-taxonomy-version spotify-intents-v0.1-proposed \
-  --confirm-guide-version spotify-annotation-v0.1-proposed
+  --confirm-taxonomy-version spotify-intents-v0.2-proposed \
+  --confirm-guide-version spotify-annotation-v0.2-proposed \
+  --acknowledge-prior-version-pilot
 ```
 
-The freeze command first verifies that all 30 pilot records are complete under the current taxonomy and guide hashes. It then records those hashes and unlocks development and golden annotation. It is not automatic and has not happened yet.
+The default freeze gate requires a complete/current pilot. The explicit acknowledgement above accepts a complete prior-version pilot and records its staleness without editing labels. Missing/incomplete records still block freeze. Freezing records the current hashes and unlocks human development/golden annotation; machine generation never accepts golden. It is not automatic and has not happened yet.
 
 If the genuinely labelled training set later lacks coverage, append a named training-only batch without replacing the initial 300 or any existing extension:
 

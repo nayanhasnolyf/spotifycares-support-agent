@@ -906,6 +906,7 @@ def freeze_guide(
     annotator_id: str,
     confirm_taxonomy_version: str,
     confirm_guide_version: str,
+    acknowledge_prior_version_pilot: bool = False,
 ) -> dict[str, Any]:
     if not annotator_id.strip():
         raise AnnotationError("annotator_id is required")
@@ -918,7 +919,12 @@ def freeze_guide(
     if confirm_guide_version != contract["guide_version"]:
         raise AnnotationError("confirmed guide version does not match the current guide")
     pilot = training_pilot_status(config)
-    if not pilot["ready_to_freeze"]:
+    accepted_prior_pilot = (
+        acknowledge_prior_version_pilot
+        and pilot["missing"] == 0
+        and pilot["incomplete"] == 0
+    )
+    if not pilot["ready_to_freeze"] and not accepted_prior_pilot:
         raise AnnotationError(
             "training pilot is not ready: "
             f"{pilot['complete_current']}/{pilot['required']} current complete annotations; "
@@ -933,6 +939,9 @@ def freeze_guide(
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "updated_by": annotator_id.strip(),
         "note": "Human-confirmed freeze; development and golden annotation unlocked.",
+        "pilot_at_approval": pilot,
+        "prior_version_pilot_acknowledged": acknowledge_prior_version_pilot,
+        "coverage_caveat": "A complete pilot does not establish broad coverage or independent human labelling; old annotation versions are preserved.",
     }
     _atomic_json(paths.state, state)
     _append_jsonl(

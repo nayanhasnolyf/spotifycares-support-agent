@@ -1,10 +1,10 @@
 schema_version: 1
 brand: SpotifyCares
 status: proposed
-taxonomy_version: spotify-intents-v0.1-proposed
-guide_version: spotify-annotation-v0.1-proposed
+taxonomy_version: spotify-intents-v0.2-proposed
+guide_version: spotify-annotation-v0.2-proposed
 primary_intent_rule: >-
-  Choose the issue that the next useful support reply should address first. If a
+  Choose the current unresolved request, not an earlier resolved problem. If a
   dangerous secondary issue exists, keep one primary intent and capture the danger
   with risk flags and the independent escalation decision.
 
@@ -151,6 +151,11 @@ intents:
       - example_d4492da5118b3f9a
 
 tie_breakers:
+  - Resolved acknowledgements with no remaining request use other_or_unclear, even when earlier context describes a technical or security problem.
+  - Restored access followed by missing playlists uses library_and_playlists; reported ongoing unauthorized activity requires security escalation.
+  - Do not infer unavailable link contents or multiple distinct problems from ambiguous wording. Keep uncertainty in notes and mark ambiguous when appropriate.
+  - Past compromise is not proof of ongoing compromise or verified present security. Record history in notes; use security_or_compromise when the available report supports a current or unresolved suspected incident, not history alone.
+  - A general security-feature request or fear of future hacking alone does not establish an incident. Safe clarification is allowed when no supported human-required issue is already present.
   - If a track is available but will not play, choose playback_and_audio; if it is absent or region-unavailable, choose catalog_and_content.
   - If the client crashes or a device integration fails, choose app_device_technical even when playback is the visible symptom.
   - If saved items disappeared, choose library_and_playlists; if they remain saved but will not play, choose playback_and_audio.
@@ -158,6 +163,9 @@ tie_breakers:
   - Choose account_access_and_profile for credential help; use the security risk flag and escalate when takeover or compromise is suspected.
   - For multiple issues, choose the one the next useful reply must address first and separately record every applicable risk and escalation reason.
   - Use other_or_unclear only after reading the available preceding context in order.
+  - Use personal_data_exposure only for visible disclosure or an explicit report of disclosure or leakage, including redacted evidence. Compromise or account changes alone do not establish exposure.
+  - A request for private information is a separate privacy-sensitive request, not an exposure event. Record explicit requests in notes and safe reply guidance; do not promise identification or disclosure. Ambiguous tracing language alone does not establish such a request.
+  - Use abusive_or_threatening_content for context-supported targeted abuse or threatening content. Abuse need not be a credible physical threat; ordinary anger or rhetorical confrontation alone does not qualify. Assess credible threats and legal or safety concerns separately.
 
 risk_flags:
   - security_or_compromise
@@ -170,17 +178,19 @@ escalation_policy:
   auto_handle_definition: >-
     The available customer message and preceding context support a routine response
     that does not require private account access, an account-specific action, or an
-    unverified current-policy claim.
+    unverified current-policy claim. A safe clarifying question is a routine response
+    when the visible case does not already establish a human-required issue. Missing
+    diagnostic detail or mention of payment alone does not require escalation.
   reason_codes:
     - code: security_or_account_compromise
-      meaning: The case suggests takeover, unauthorized access, identity misuse, or another security incident.
+      meaning: The available report supports a current or unresolved suspected takeover, unauthorized access or change, identity misuse, or another security incident; history or fear alone is insufficient.
     - code: private_account_investigation_or_action
       meaning: A responsible response requires looking up, changing, restoring, or verifying a specific account.
     - code: refund_or_payment_investigation
       meaning: A refund, unknown charge, duplicate charge, or account-specific payment dispute must be investigated.
     - code: materially_insufficient_context
-      meaning: The message and available preceding context do not support a responsible routine answer.
+      meaning: Even a responsible routine next step or safe clarifying question cannot be chosen from the available information.
     - code: multiple_issues_include_human_required
-      meaning: At least one issue in a multi-issue message requires human handling.
+      meaning: Distinct issues are established and at least one requires human handling; prefer a more specific supported security, payment, or account-action reason when it explains routing.
     - code: unavailable_current_fact_or_policy
       meaning: The answer depends on current facts or policy unavailable to this historical-data prototype.

@@ -7,6 +7,7 @@ import streamlit as st
 from spotify_cares.annotation import (
     AnnotationError,
     AnnotationStore,
+    current_contract,
     get_annotation_view,
     load_guide_state,
     load_queue,
@@ -135,6 +136,11 @@ if existing:
         f"Saved status: {existing.status}; revision {existing.revision}; "
         f"annotated at {existing.annotation_timestamp.isoformat()}"
     )
+    if any(getattr(existing, key) != value for key, value in current_contract(config).items()):
+        st.warning(
+            f"Saved under {existing.guide_version}; stale under the active guide. "
+            "The original judgment and provenance are preserved, not automatically re-reviewed."
+        )
 
 left, right = st.columns(2)
 with left:

@@ -1,5 +1,14 @@
 # Training pilot review — pending owner decisions
 
+Historical snapshot below: its original counts and proposals are retained for audit,
+not presented as current annotations. The flagged-case decisions have now been
+reviewed with the owner and recorded locally with AI-assistance provenance.
+The active v0.2 guide supersedes the original proposals, particularly item 3:
+privacy-sensitive requests are not exposure events. The owner has also explicitly
+removed completion of the 20-example coverage sample as a freeze prerequisite.
+See `docs/annotation_guide.md` and `docs/machine_annotation.md` for the current
+contract, limited coverage, and final approval steps. No freeze has been performed.
+
 Review date: 2026-09-11. This is an assistant review of the 30 completed training-pilot annotations, not an independent human adjudication. No proposed changes below have been applied to the annotation guide, taxonomy, labels, or queues.
 
 ## Scope and provenance

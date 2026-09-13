@@ -109,17 +109,46 @@ def build_parser() -> argparse.ArgumentParser:
     freeze_parser.add_argument("--confirm-taxonomy-version", required=True)
     freeze_parser.add_argument("--confirm-guide-version", required=True)
     freeze_parser.add_argument(
+        "--acknowledge-prior-version-pilot", action="store_true",
+        help="explicitly accept a complete older pilot without refreshing any label versions",
+    )
+    freeze_parser.add_argument(
         "--config",
         type=Path,
         default=DEFAULT_CONFIG,
         help=f"configuration file (default: {DEFAULT_CONFIG})",
     )
+    for command in ("machine-annotate", "validate-machine-annotations"):
+        machine_parser = commands.add_parser(command, help="frozen-policy machine labels, never golden")
+        machine_parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+        machine_parser.add_argument("--queue", choices=("training", "development"), required=True)
+        machine_parser.add_argument("--model", required=True, help="explicit Gemini model ID; no implicit model selection")
+        machine_parser.add_argument("--prompt", type=Path, default=Path("configs/machine_annotation_prompt.txt"))
+        if command == "machine-annotate":
+            machine_parser.add_argument("--limit", type=int, help="maximum attempts this invocation; rerun to resume")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command in ("machine-annotate", "validate-machine-annotations"):
+        import json
+        from spotify_cares.annotation import AnnotationError
+        from spotify_cares.config import load_config
+        from spotify_cares.machine_annotation import machine_annotate, validate_machine_annotations
+
+        try:
+            operation = machine_annotate if args.command == "machine-annotate" else validate_machine_annotations
+            options = {"limit": args.limit} if args.command == "machine-annotate" else {}
+            report = operation(load_config(args.config), args.queue, model=args.model,
+                               prompt_path=args.prompt, **options)
+        except AnnotationError as error:
+            print(f"blocked: {error}")
+            return 2
+        print(json.dumps(report, indent=2))
+        return 0 if report["complete"] else 1
 
     if args.command == "config":
         from spotify_cares.config import load_config
@@ -252,13 +281,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "guide-status":
-        from spotify_cares.annotation import load_guide_state
+        from spotify_cares.annotation import load_guide_state, current_contract, training_pilot_status
         from spotify_cares.config import load_config
 
-        state = load_guide_state(load_config(args.config))
+        config = load_config(args.config)
+        state = load_guide_state(config)
+        contract = current_contract(config)
         print(f"status: {state['status']}")
-        print(f"taxonomy version: {state['taxonomy_version']}")
-        print(f"guide version: {state['guide_version']}")
+        print(f"active taxonomy version: {contract['taxonomy_version']}")
+        print(f"active guide version: {contract['guide_version']}")
+        print(f"active taxonomy SHA-256: {contract['taxonomy_sha256']}")
+        print(f"active guide SHA-256: {contract['guide_sha256']}")
+        print(f"checkpoint matches active files: {all(state.get(k) == v for k, v in contract.items())}")
+        pilot = training_pilot_status(config)
+        print(f"pilot: current={pilot['complete_current']}, stale={pilot['stale']}, missing={pilot['missing']}, incomplete={pilot['incomplete']}")
         return 0
 
     if args.command == "freeze-guide":
@@ -270,6 +306,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             annotator_id=args.annotator_id,
             confirm_taxonomy_version=args.confirm_taxonomy_version,
             confirm_guide_version=args.confirm_guide_version,
+            acknowledge_prior_version_pilot=args.acknowledge_prior_version_pilot,
         )
         print(f"status: {state['status']}")
         print("development and golden annotation: unlocked")

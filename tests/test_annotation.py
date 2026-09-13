@@ -283,8 +283,8 @@ def test_golden_view_excludes_model_suggestions(annotation_config: AppConfig):
     freeze_guide(
         annotation_config,
         annotator_id="tester",
-        confirm_taxonomy_version="spotify-intents-v0.1-proposed",
-        confirm_guide_version="spotify-annotation-v0.1-proposed",
+        confirm_taxonomy_version=current_contract(annotation_config)["taxonomy_version"],
+        confirm_guide_version=current_contract(annotation_config)["guide_version"],
     )
     view = get_annotation_view(annotation_config, "golden", "golden_0")
     assert "model_prediction" not in view
@@ -298,15 +298,15 @@ def test_guide_freeze_gates_development_and_golden(annotation_config: AppConfig)
         freeze_guide(
             annotation_config,
             annotator_id="tester",
-            confirm_taxonomy_version="spotify-intents-v0.1-proposed",
-            confirm_guide_version="spotify-annotation-v0.1-proposed",
+            confirm_taxonomy_version=current_contract(annotation_config)["taxonomy_version"],
+            confirm_guide_version=current_contract(annotation_config)["guide_version"],
         )
     _complete_pilot(annotation_config)
     state = freeze_guide(
         annotation_config,
         annotator_id="tester",
-        confirm_taxonomy_version="spotify-intents-v0.1-proposed",
-        confirm_guide_version="spotify-annotation-v0.1-proposed",
+        confirm_taxonomy_version=current_contract(annotation_config)["taxonomy_version"],
+        confirm_guide_version=current_contract(annotation_config)["guide_version"],
     )
     assert state["status"] == "frozen"
     assert AnnotationStore(annotation_config, "development").load() == {}

@@ -53,8 +53,31 @@ Pilot review checkpoint (2026-09-11): 30/30 pilot records are complete/current, 
 Stage 4 review continuation: the local annotation app now has a Coverage review
 view of the 20 agreed existing training records, pinned by stable ID. It shares
 the original training label store and preserves queue order. One-at-a-time case
-adjudication, owner decisions on proposed guide wording, and post-review coverage
-validation remain pending. The active guide has not been revised or frozen.
+adjudication has since been completed for the flagged pilot cases, with explicit
+owner decisions and local AI-assistance provenance. Final guide approval remains pending.
+
+Stage 4 policy consolidation (2026-09-13): active taxonomy and guide are now
+`spotify-intents-v0.2-proposed` and `spotify-annotation-v0.2-proposed`.
+All 30 existing completed annotations retain their prior versions and are stale
+under the new contract, not silently re-reviewed. Queues, split assignments,
+annotation revisions, and local assistance records are preserved. The owner may
+explicitly acknowledge the completed prior-version pilot at final freeze without
+refreshing its labels. The 0/20 Coverage review is a documented limitation, not
+a new prerequisite. Human coverage remains concentrated in account/security,
+with no current pilot playback or membership labels and four retained ambiguities.
+
+Machine-annotation tooling is implemented separately from human CSVs, with a
+matching-freeze gate for both training and development, provenance-bound resumable
+JSONL, strict response validation, and explicit failed attempts. Existing human
+records of every status are excluded. Golden files and future replies are not
+read by this workflow. Synthetic tests exercise its gates and persistence;
+no real generation, classifier training, or evaluation is authorized in this stage.
+Live Gemini integration remains unverified until approval/freeze and credentials
+are available. Machine development labels support model-agreement measurements,
+not independent human accuracy. See `docs/machine_annotation.md` for commands.
+Verification: 57 tests passed using synthetic fixtures/fake providers; CLI help
+and active contract/staleness reporting worked; all 38 protected local artifact
+hashes were unchanged. No generation or freeze was executed.
 
 ## Stage 5 — Golden-set annotation (blocked on Stage 4 human freeze)
 
