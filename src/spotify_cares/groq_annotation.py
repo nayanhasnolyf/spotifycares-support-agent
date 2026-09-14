@@ -25,6 +25,26 @@ GROQ_GENERATION_SETTINGS = {"temperature": 0, "max_completion_tokens": 2048,
 STRICT_MODELS = {"openai/gpt-oss-20b", "openai/gpt-oss-120b"}
 
 
+def generation_settings(config):
+    return {**GROQ_GENERATION_SETTINGS,
+            "max_completion_tokens": config.annotation.groq_max_completion_tokens}
+
+
+def usage_fields(data):
+    """Only actual numeric provider usage; absent fields stay absent, never zero-filled."""
+    value = data.get("usage")
+    if not isinstance(value, dict):
+        return None
+    result = {k: value[k] for k in ("prompt_tokens", "completion_tokens", "total_tokens")
+              if type(value.get(k)) is int and value[k] >= 0}
+    for kind, key in (("prompt_tokens_details", "cached_tokens"),
+                      ("completion_tokens_details", "reasoning_tokens")):
+        details = value.get(kind, {})
+        if isinstance(details, dict) and type(details.get(key)) is int and details[key] >= 0:
+            result[kind] = {key: details[key]}
+    return result or None
+
+
 class ProviderPause(AnnotationError):
     """No generation attempt was made; defer without a fake failed label."""
 
@@ -204,9 +224,9 @@ class GroqProvider:
                     {"role": "user", "content": canonical(message)}],
                    "response_format": {"type": "json_schema", "json_schema": {
                        "name": "machine_annotation", "strict": True, "schema": schema}},
-                   **GROQ_GENERATION_SETTINGS}
+                   **generation_settings(self.config)}
         input_tokens = token_reservation(payload)
-        output_tokens = GROQ_GENERATION_SETTINGS["max_completion_tokens"]
+        output_tokens = payload["max_completion_tokens"]
         wait, observed = self.budget_wait(model, input_tokens, output_tokens, time.time())
         if wait > self.config.annotation.machine_rate.max_single_wait_seconds:
             raise ProviderPause(f"Groq request/token budget requires {wait:.1f}s wait; resume later")
@@ -225,15 +245,24 @@ class GroqProvider:
                                    "tokens": input_tokens + output_tokens})
         response = self.client.post("chat/completions", json=payload)
         headers = quota_headers(response.headers)
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        usage = usage_fields(data)
         rate_evidence = error_evidence(response) if response.status_code != 200 else None
         _append_jsonl(self.ledger, {"kind": "response", "time": time.time(), "model": model,
                                    "headers": headers, "http_status": response.status_code,
-                                   "limit_category": rate_evidence.category if rate_evidence else None})
+                                   "limit_category": rate_evidence.category if rate_evidence else None,
+                                   "usage": usage})
         self.last_controls["response_headers"] = headers
+        self.last_controls["usage"] = usage
         if response.status_code != 200:
             raise GroqHTTPError(response.status_code, rate_evidence)
-        data = response.json()
         choices = data.get("choices", [])
+        self.last_controls["finish_reason"] = choices[0].get("finish_reason") if choices else None
         # Length-limited or refused responses must not masquerade as success.
         if not choices or choices[0].get("finish_reason") != "stop":
             return None, data.get("model")

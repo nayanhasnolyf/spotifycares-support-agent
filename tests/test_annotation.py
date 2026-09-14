@@ -120,6 +120,11 @@ def annotation_config(tmp_path: Path) -> AppConfig:
             "golden_challenge_size": 1,
             "training_pilot_size": 1,
             "retained_machine_runs": [],
+            "excluded_machine_runs": {},
+            "machine_record_exclusions_path": None,
+            "groq_prompt_path": Path("configs/machine_annotation_prompt.txt"),
+            "groq_prompt_profile": "full",
+            "groq_max_completion_tokens": 2048,
             "machine_rate": base.annotation.machine_rate.model_copy(update={"request_interval_seconds": 0}),
         }
     )

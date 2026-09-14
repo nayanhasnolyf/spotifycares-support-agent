@@ -50,6 +50,12 @@ annotation:
   machine_model: gemini-2.5-flash
   machine_provider: gemini
   groq_model: openai/gpt-oss-20b
+  groq_prompt_path: configs/machine_annotation_prompt_v2.txt
+  groq_prompt_profile: compact-v1
+  groq_max_completion_tokens: 1024
+  machine_record_exclusions_path: data/labels/annotation/machine/reviews/record_exclusions.json
+  excluded_machine_runs:
+    c34713655e61fb0b06836a6724f2dd9834e3d8303bad1c188fdd4b0fd5fd7eea: unresolved policy inconsistency; preserve history but exclude from usable labels
   # RPM is an operator ceiling. TPM/RPD were observed live and may change.
   groq_rate:
     requests_per_minute: 5

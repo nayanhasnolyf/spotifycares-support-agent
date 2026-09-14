@@ -227,3 +227,134 @@ def test_golden_rejected_for_combining_before_any_source_read(annotation_config,
     monkeypatch.setattr("pandas.read_parquet", lambda *a, **kw: pytest.fail("golden access"))
     with pytest.raises(AnnotationError):
         combined_machine_manifest(annotation_config, "golden", provider_name="groq")
+
+
+def test_compact_renderer_preserves_frozen_rules_and_new_identity(annotation_config):
+    from spotify_cares.machine_annotation import compact_policy
+    from spotify_cares.annotation import load_taxonomy
+    guide = Path("docs/annotation_guide.md").read_text(encoding="utf-8")
+    taxonomy = load_taxonomy(annotation_config.annotation.taxonomy_path)
+    rendered = compact_policy(taxonomy, guide)
+    for intent in taxonomy.intents:
+        for text in [intent.meaning, *intent.include, *intent.exclude]:
+            assert text in rendered
+    assert all(rule in rendered for rule in taxonomy.tie_breakers)
+    assert "Mark `ambiguous` when" in rendered
+    assert "Do not copy private details, promise account action" in rendered
+    assert "## Required workflow" not in rendered and "example_ids" not in rendered
+    annotation_config.annotation.guide_path.write_text(guide, encoding="utf-8")
+    ready(annotation_config)
+    old = prepare_run(annotation_config, "training", None, None, "groq")[-2]
+    annotation_config.annotation.groq_prompt_profile = "compact-v1"
+    annotation_config.annotation.groq_prompt_path = Path("configs/machine_annotation_prompt_v2.txt")
+    annotation_config.annotation.groq_max_completion_tokens = 1024
+    new = prepare_run(annotation_config, "training", None, None, "groq")[-2]
+    assert old["guide_sha256"] == new["guide_sha256"]
+    assert old["prompt_sha256"] != new["prompt_sha256"]
+    assert new["generation_settings"]["max_completion_tokens"] == 1024
+
+
+def test_exclusion_retry_supersession_and_pinned_resume(annotation_config):
+    config = ready(annotation_config)
+    old = machine_annotate(config, "training", provider_name="groq", provider=fake)
+    before = Path(old["path"]).read_bytes()
+    config.annotation.excluded_machine_runs = {old["run_sha256"]: "synthetic unresolved review"}
+    excluded = combined_machine_manifest(config, "training", provider_name="groq")
+    assert excluded["validated_successes"] == 0 and excluded["remaining"] == 1
+    with pytest.raises(AnnotationError, match="excluded"):
+        machine_annotate(config, "training", provider_name="groq", provider=fake)
+    config.annotation.groq_max_completion_tokens = 1024
+    *_, provenance, _ = prepare_run(config, "training", None, None, "groq")
+    pin = config.annotation.output_dir / "synthetic_selection.json"
+    pin.write_text(canonical({"queue_name": "training", "run_sha256": digest(provenance),
+                              "example_ids": ["train_1"]}))
+    result = machine_annotate(config, "training", provider_name="groq", provider=fake, selection_path=pin)
+    assert result["validated_successes"] == 1
+    assert load_events(Path(result["path"]))[0].supersedes[0]["run_sha256"] == old["run_sha256"]
+    machine_annotate(config, "training", provider_name="groq", selection_path=pin,
+                     provider=lambda **kw: pytest.fail("duplicate pinned call"))
+    assert Path(old["path"]).read_bytes() == before
+
+
+def test_reservation_expiry_counts_failed_retries_without_refunds(annotation_config, monkeypatch):
+    provider = provider_for(annotation_config, monkeypatch)
+    annotation_config.annotation.groq_rate.tokens_per_minute = 100
+    for when in (100, 110):
+        _append_jsonl(provider.ledger, {"kind": "reservation", "time": when, "model": "m",
+                                       "tokens": 40, "input_tokens": 30, "output_tokens": 10})
+        _append_jsonl(provider.ledger, {"kind": "response", "time": when+1, "model": "m",
+                                       "headers": {}, "http_status": 429,
+                                       "usage": {"total_tokens": 1}})
+    # Both reservations count even though usage is smaller and responses failed.
+    assert provider.budget_wait("m", 25, 10, 120)[0] == pytest.approx(40.1)
+    assert provider.budget_wait("m", 25, 10, 171)[0] == 0
+    annotation_config.annotation.groq_rate.requests_per_day = 2
+    with pytest.raises(ProviderPause, match="daily request"):
+        provider.budget_wait("m", 25, 10, 171)
+    assert provider.budget_wait("m", 25, 10, 86511)[0] == 0
+
+
+def test_usage_capture_has_no_inferred_counts_or_raw_fields():
+    from spotify_cares.groq_annotation import usage_fields
+    assert usage_fields({}) is None
+    assert usage_fields({"usage": {"prompt_tokens": 40, "completion_tokens": 10,
+        "total_tokens": 50, "secret": "SYNTHETIC_SECRET",
+        "completion_tokens_details": {"reasoning_tokens": 5, "ignored": "secret"}}}) == {
+            "prompt_tokens": 40, "completion_tokens": 10, "total_tokens": 50,
+            "completion_tokens_details": {"reasoning_tokens": 5}}
+
+
+def test_retained_gemini_uses_its_original_prompt(annotation_config):
+    config = ready(annotation_config)
+    initial = machine_annotate(config, "training", model="synthetic", provider=fake)
+    retain(config, initial)
+    changed = config.annotation.output_dir / "synthetic_new_prompt.txt"
+    changed.write_text("Synthetic revised machine prompt")
+    result = combined_machine_manifest(config, "training", model="synthetic", provider_name="groq", prompt_path=changed)
+    assert result["successes_by_provider"]["gemini"] == 1
+
+
+def test_record_hold_excludes_success_without_mutating_or_repeating(annotation_config):
+    config = ready(annotation_config)
+    result = machine_annotate(config, "training", provider_name="groq", provider=fake)
+    path = Path(result["path"])
+    before = path.read_bytes()
+    registry = config.annotation.output_dir / "synthetic_exclusions.json"
+    config.annotation.machine_record_exclusions_path = registry
+    with pytest.raises(AnnotationError, match="registry"):
+        combined_machine_manifest(config, "training", provider_name="groq")
+    registry.write_text(canonical([{"queue_name": "training", "run_sha256": result["run_sha256"],
+                                   "example_id": "train_1", "reason": "synthetic review hold"}]))
+    report = machine_annotate(config, "training", provider_name="groq",
+                              provider=lambda **kw: pytest.fail("implicit repeated attempt"))
+    assert report["validated_successes"] == 0 and report["excluded_active_records"] == 1
+    assert report["remaining"] == 1 and path.read_bytes() == before
+
+
+def test_http_retry_reserves_each_attempt_and_keeps_actual_usage(annotation_config, monkeypatch):
+    config = ready(annotation_config)
+    monkeypatch.setenv("GROQ_API_KEY", "synthetic-key")
+    monkeypatch.setattr("spotify_cares.groq_annotation.token_reservation", lambda payload: 100)
+    monkeypatch.setattr("spotify_cares.groq_annotation.time.sleep", lambda seconds: None)
+    calls = []
+    def handle(request):
+        if request.url.path.endswith("models"):
+            return httpx.Response(200, json={"data": [{"id": "openai/gpt-oss-20b"}]})
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"retry-after": "0"},
+                                  json={"error": {"message": "synthetic TPM limit"}})
+        payload = json.loads(request.content)
+        text, model = fake(message=json.loads(payload["messages"][1]["content"]))
+        return httpx.Response(200, json={"model": model,
+            "usage": {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70},
+            "choices": [{"finish_reason": "stop", "message": {"content": text}}]})
+    client = httpx.Client(base_url="https://api.groq.com/openai/v1/", transport=httpx.MockTransport(handle))
+    provider = GroqProvider(config, client=client)
+    report = machine_annotate(config, "training", provider_name="groq", provider=provider, limit=2)
+    assert report["complete"] and len(calls) == 2
+    events = load_events(Path(report["path"]))
+    assert [e.status for e in events] == ["failure", "success"]
+    reservations = [e for e in provider._events() if e["kind"] == "reservation"]
+    assert len(reservations) == 2 and all(e["tokens"] == 2148 for e in reservations)
+    assert events[-1].request_controls["provider_controls"]["usage"]["total_tokens"] == 70

@@ -141,6 +141,35 @@ real queue validators report structurally valid but incomplete outputs. All 39
 pre-existing protected annotation artifacts are byte-for-byte unchanged. The new
 Groq output, budget ledger, combined snapshots, and AI-assisted review stay ignored.
 
+Revised bounded smoke (2026-09-15): token budgeting is resolved without changing
+the frozen policy or customer/context inputs. A deterministic compact policy
+renderer removes example IDs, repeated descriptions and human/UI workflow prose;
+the versioned v2 prompt reinforces existing boundaries and concise outputs. The
+configurable completion cap is now 1,024, with prompt/settings bound to new run
+provenance. Original Gemini sources pin their original prompt. Excluded runs and a
+local record-exclusion registry prevent unresolved responses from being selected.
+Five stable training IDs were pinned to the new run, so resumptions could not
+extend the smoke. All five completed with valid schemas, `stop` finish reasons,
+zero failures and no retries. Actual API usage: 17,266 prompt + 1,066 completion =
+18,332 total tokens (388 reasoning tokens included in completion). Full reservations
+were retained until expiry; no assumed refunds or increased RPM allowance.
+The original response's usage is unrecoverable because it was not saved.
+
+Content review is AI-assisted, not human accuracy: unsupported account-access
+classification persists, and two further examples overstate ambiguous payment
+evidence (one also offers account/ticket actions). Three new records remain held;
+the original Groq record remains excluded and preserved with an explicit
+supersession link. Combined usable selection: 11 Gemini + 2 Groq; 254 unattempted
+plus 3 held training IDs. Development is still 0/80. Next unfinished action is
+human review of the local smoke findings and a deliberate next model/prompt
+experiment; do not expand or train a classifier. A network-disabled pinned resume
+made no provider calls and changed neither output JSONL nor the quota ledger.
+Verification: 106 tests passed; CLI help, compilation and whitespace checks passed.
+All 43 pre-existing non-ledger local artifacts are byte-for-byte unchanged; the
+ledger's original prefix is unchanged and exactly five request reservations were
+appended, each more than 60 seconds apart. Frozen hashes still match and all 30
+human labels remain stale. Local review findings are not independent human ratings.
+
 ## Stage 5 — Golden-set annotation (freeze satisfied; human work outstanding)
 
 Randomly select and genuinely hand-label a target of 200 examples (allowed range: 150–250). Preserve stable IDs and provenance. Double-label a subset to measure agreement and adjudicate disagreements without producing model predictions for the golden set.

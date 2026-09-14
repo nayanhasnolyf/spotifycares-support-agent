@@ -12,6 +12,123 @@ the local freeze manifest, not a rewrite of those files, records approval.
 
 Frozen taxonomy SHA-256: `15809663951befd9688aae18c301d85f159d3d95d22e153ce754f949b9b7a688`.
 Frozen guide SHA-256: `3cc6c56f8b954e12000eeec501d1bdd4b1f1a6a123a53aa10faf7868e27016c3`.
+
+## Revised bounded smoke test
+
+This checkpoint supersedes the incomplete smoke above. The frozen taxonomy and
+guide hashes, human annotations, Gemini outputs, split assignments and golden data
+were preserved. Only five pinned training examples were requested; no development
+generation, bulk generation, classifier training or evaluation occurred.
+
+### Token diagnosis and changes
+
+The old request estimated 7,036 input tokens and reserved a maximum 2,048 output
+tokens: 9,084 total, above the observed 8,000 TPM ceiling even in an empty window.
+Its minute reservation had expired before this follow-up. Waiting alone could not
+solve that single-request check. Actual usage from the old response was discarded;
+neither the remaining-token header nor tokenizing its stored decision can recover
+the provider's prompt/completion/reasoning usage. It remains unknown.
+
+The versioned `configs/machine_annotation_prompt_v2.txt` and `compact-v1` renderer
+retain all intent inclusion/exclusion rules, tie-breakers, flags, and escalation
+definitions, plus the guide's distinct judgment, ambiguity, escalation and reply
+constraints. They omit example IDs, repeated descriptions and human/UI workflow
+instructions. No customer/context text is shortened; no frozen policy file changes.
+The eight output fields remain required; notes and guidance are requested concisely.
+
+`annotation.groq_max_completion_tokens: 1024` is now configurable and recorded in
+run provenance. The model remains `openai/gpt-oss-20b`. Five input reservations were
+4,537–4,553 tokens, plus 1,024 output: 5,561–5,577 per request. This fits individually,
+but two such reservations exceed 8,000 within a minute. The runner paused between
+cases and resumed after expiry instead of bypassing its limiter. The 5-RPM setting
+is an operator ceiling, not a newly verified account allowance.
+
+Minute reservations expire at 60 seconds; conservative daily accounting is rolling
+24 hours. Every attempted retry reserves again. Tests cover both expiry boundaries,
+two failed reservations, and an actual fake-HTTP retry through the adapter. Actual
+usage is now recorded in label provenance controls and ledger responses, including
+reasoning tokens when supplied. Absent usage remains null, not invented. We do not
+refund unused completion reservations merely because billed usage is smaller:
+[Groq's rate-limit documentation](https://console.groq.com/docs/rate-limits) does
+not establish that such a refund is safe for this accounting scheme.
+
+### Actual bounded result and semantic review
+
+All five distinct IDs returned complete (`finish_reason: stop`), schema-valid
+responses. No API failures or live retries occurred. Actual provider-reported usage:
+
+| Measure | Tokens |
+|---|---:|
+| Prompt | 17,266 |
+| Completion | 1,066 |
+| Total | 18,332 |
+| Reasoning, already included in completion | 388 |
+
+Completion sizes ranged from 160 to 276 tokens, including reasoning; all fit the
+1,024 cap. This is smoke-test usage and format evidence, not annotation accuracy.
+
+The original problematic output classified an entitlement issue as account access
+without credential/profile/access evidence, contradicting the taxonomy's explicit
+account exclusions and paid-entitlement membership inclusion. It also offered
+account review while choosing no escalation; the guide permits customer-side safe
+clarification but not an assistant promise of private investigation. The revised
+response fixes that guidance offer but repeats the unsupported intent.
+
+AI-assisted inspection found two other unresolved records: ambiguous payment
+wording was presented as definite evidence, and one response also offered checking
+transactions/opening a ticket rather than a bounded human handoff. Those records
+are excluded, not silently corrected. Two other responses have no blocking issue
+identified by this inspection; they are not independently human-approved. Detailed
+evidence and cautions stay local at `machine/reviews/groq_smoke_v2_review.json`.
+The recurring intent/ambiguity/action-boundary problems mean **not ready for bulk**.
+
+### Eligible runs, exclusions, and supersession
+
+- Retained Gemini run `7ca82b285845f6cfdbf6f4dffc4a89d083bb0101959997718f602c45bf28fb4e`:
+  11 successes selected under its original prompt and frozen-policy provenance.
+- Old Groq run `c34713655e61fb0b06836a6724f2dd9834e3d8303bad1c188fdd4b0fd5fd7eea`:
+  explicitly excluded from usable selection; original response untouched.
+- Revised Groq run `639b2f0ab7493e927ce4dcc0bf125f6a48704e181ce4908fe4a398df29aeb659`:
+  five saved responses, three held by the ignored record-exclusion registry and two
+  eligible for the combined machine-label manifest. Eligibility is not accuracy.
+
+The registry path is configured by `machine_record_exclusions_path`; missing or
+invalid configured registries fail closed. Old snapshots are historical and must
+not be used to bypass current exclusions. New combined manifests embed the current
+exclusions and old-source fingerprints. The revised flagged response explicitly
+links to the excluded original through `supersedes`. Neither record is relabelled.
+Retained sources now pin their own prompt paths rather than inheriting the active
+prompt. Any future change must preserve/review source eligibility explicitly.
+
+Current training selection: 13 machine labels (11 Gemini + 2 Groq), 254 unattempted
+and 3 held IDs; all 30 human records remain stale and protected. Development: 0/80.
+No independent human ratings were created, and machine-labelled development would
+still measure model agreement rather than independent human accuracy.
+
+The selection file pins exactly the flagged training ID and four following eligible
+queue IDs, plus this run hash. A network-disabled resume skipped all five stored
+successes—including held records—without creating duplicates or mutating the
+ledger. A held success is not automatically retried under the same run; a reviewed
+new run is required. The smoke is complete; **do not generate more now**.
+
+Read-only next command:
+
+```powershell
+uv run spotify-cares validate-machine-annotations --queue training --provider groq
+```
+
+For reproducing the no-op resume check only (not selecting five new examples):
+
+```powershell
+uv run --env-file .env spotify-cares machine-annotate --queue training --provider groq --selection data/labels/annotation/machine/reviews/groq_smoke_v2_selection.json --limit 5
+```
+
+Verification: 106 tests passed, including 24 Groq/mixed-provider tests. CLI help,
+compilation and whitespace checks passed. The five requests reserved 27,844 tokens
+in total across separate windows; actual usage was 18,332, with no speculative
+credit returned. Starts were 84.68, 139.69, 66.86 and 98.90 seconds apart. All 43
+pre-existing non-ledger artifacts are unchanged, and the ledger's original prefix
+is preserved. Frozen policy hashes still match; all 30 human labels remain stale.
 All 30 existing annotations remain prior-version records and stale.
 
 The consolidated rules are: current unresolved request rather than history;

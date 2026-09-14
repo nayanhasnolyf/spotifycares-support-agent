@@ -83,6 +83,7 @@ class RetainedMachineRun(StrictModel):
     model: str = Field(min_length=1)
     run_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     legacy_gemini: bool = False
+    prompt_path: Path = Path("configs/machine_annotation_prompt.txt")
 
 
 class GroqRateSettings(StrictModel):
@@ -108,12 +109,21 @@ class AnnotationSettings(StrictModel):
     machine_model: str | None = None
     machine_provider: Literal["gemini", "groq"] = "gemini"
     groq_model: str = "openai/gpt-oss-20b"
+    groq_prompt_path: Path = Path("configs/machine_annotation_prompt.txt")
+    groq_prompt_profile: Literal["full", "compact-v1"] = "full"
+    groq_max_completion_tokens: int = Field(default=2048, ge=512, le=4096)
+    excluded_machine_runs: dict[str, str] = Field(default_factory=dict)
+    machine_record_exclusions_path: Path | None = None
     groq_rate: GroqRateSettings = Field(default_factory=GroqRateSettings)
     retained_machine_runs: list[RetainedMachineRun] = Field(default_factory=list)
     machine_rate: MachineRateSettings = Field(default_factory=MachineRateSettings)
 
     @model_validator(mode="after")
     def validate_sizes(self) -> "AnnotationSettings":
+        import re
+        if any(not re.fullmatch(r"[0-9a-f]{64}", key) or not reason.strip()
+               for key, reason in self.excluded_machine_runs.items()):
+            raise ValueError("excluded runs require SHA-256 keys and reasons")
         values = (
             self.training_queue_size,
             self.development_queue_size,

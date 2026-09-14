@@ -82,6 +82,7 @@ class MachineRecord(BaseModel):
     provider_http_status: int | None = Field(default=None, ge=100, le=599)
     rate_limit_evidence: RateEvidence | None = None
     request_controls: dict | None = None
+    supersedes: list[dict] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def consistent(self):
@@ -106,7 +107,28 @@ def validate_decision(decision: MachineDecision, taxonomy) -> None:
         raise ValueError("unknown risk flag")
 
 
-def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_path: Path,
+def compact_policy(taxonomy, guide):
+    """Keep every intent rule/tie-breaker; omit examples and human/UI workflow prose.
+
+The guide's distinct ambiguity, flag, escalation, and reply constraints are copied
+verbatim. The frozen source files are never edited or summarized by another model.
+"""
+    import re
+    tax = taxonomy.model_dump()
+    tax = {k: tax[k] for k in ("primary_intent_rule", "intents", "tie_breakers", "risk_flags", "escalation_policy")}
+    tax["intents"] = [{k: v for k, v in i.items() if k not in {"name", "example_ids"}} for i in tax["intents"]]
+    parts = re.split(r"(?m)^## ", guide)
+    sections = {p.split("\n", 1)[0].strip(): p.split("\n", 1)[1] for p in parts[1:]}
+    names = ("The two independent judgments", "Risk flags and ambiguity", "Escalation policy")
+    if any(name not in sections for name in names):
+        raise AnnotationError("compact renderer requires reviewed guide sections")
+    guidance = next((p for p in guide.split("\n\n") if p.startswith("Expected reply guidance should")), None)
+    if guidance is None:
+        raise AnnotationError("compact renderer missing reply-guidance constraint")
+    return "\nTAXONOMY\n" + canonical(tax) + "\nGUIDE CONSTRAINTS\n" + "\n".join(sections[n] for n in names) + "\n" + guidance
+
+
+def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_path: Path | None,
                 provider_name=None, legacy_gemini=False):
     # Check before any queue, label, or input reads, including training.
     if queue_name not in ALLOWED_QUEUES:
@@ -115,6 +137,7 @@ def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_pa
     provider_name = provider_name or config.annotation.machine_provider
     if provider_name not in {"gemini", "groq"} or (legacy_gemini and provider_name != "gemini"):
         raise AnnotationError("invalid provider/legacy selection")
+    prompt_path = prompt_path or (config.annotation.groq_prompt_path if provider_name == "groq" else PROMPT_PATH)
     model = model if model is not None else (
         config.annotation.groq_model if provider_name == "groq" else config.annotation.machine_model
     )
@@ -141,6 +164,10 @@ def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_pa
     system = prompt_path.read_text(encoding="utf-8") + "\nTAXONOMY\n" + canonical(
         taxonomy.model_dump()
     ) + "\nGUIDE\n" + config.annotation.guide_path.read_text(encoding="utf-8")
+    compact = provider_name == "groq" and config.annotation.groq_prompt_profile == "compact-v1"
+    if compact:
+        system = prompt_path.read_text(encoding="utf-8") + compact_policy(
+            taxonomy, config.annotation.guide_path.read_text(encoding="utf-8"))
     provenance = {
         "workflow_version": "machine-annotation-v2", "model": model,
         "google_genai_version": version("google-genai"),
@@ -153,27 +180,52 @@ def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_pa
     if not legacy_gemini:
         provenance.update(workflow_version="machine-annotation-v3", provider=provider_name)
         if provider_name == "groq":
-            from spotify_cares.groq_annotation import GROQ_GENERATION_SETTINGS
+            from spotify_cares.groq_annotation import generation_settings
             provenance.pop("google_genai_version")
             provenance.update(httpx_version=version("httpx"),
-                              generation_settings=GROQ_GENERATION_SETTINGS,
+                              generation_settings=generation_settings(config),
                               transport="groq-chat-completions-json-schema-strict-v1")
+            if compact:
+                provenance.update(prompt_version="spotify-machine-v2", policy_renderer="compact-v1")
     run_hash = digest(provenance)
     path = config.annotation.output_dir / "machine" / queue_name / f"{run_hash}.jsonl"
     return queue, pool_path, taxonomy, system, schema, provenance, path
 
 
-def retained_labels(config, queue_name, prompt_path=PROMPT_PATH):
+class RecordExclusion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    queue_name: Literal["training", "development"]
+    run_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    example_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
+def record_exclusions(config, queue_name):
+    path = config.annotation.machine_record_exclusions_path
+    if path is None:
+        return []
+    try:
+        values = json.loads(path.read_text(encoding="utf-8"))
+        return [item.model_dump() for value in values
+                if (item := RecordExclusion.model_validate(value)).queue_name == queue_name]
+    except (OSError, ValueError, TypeError):
+        raise AnnotationError("record-exclusion registry missing/invalid; restore it before selecting labels") from None
+
+
+def retained_labels(config, queue_name, prompt_path=None):
     """Explicit ordered sources only; never scan and silently merge arbitrary runs."""
     selected, sources, seen = {}, [], set()
+    held = {(e["run_sha256"], e["example_id"]) for e in record_exclusions(config, queue_name)}
     for source in config.annotation.retained_machine_runs:
         if source.queue != queue_name:
+            continue
+        if source.run_sha256 in config.annotation.excluded_machine_runs:
             continue
         if source.run_sha256 in seen:
             raise AnnotationError("duplicate retained run")
         seen.add(source.run_sha256)
         queue, pool, taxonomy, _, _, provenance, path = prepare_run(
-            config, queue_name, source.model, prompt_path, source.provider, source.legacy_gemini)
+            config, queue_name, source.model, source.prompt_path, source.provider, source.legacy_gemini)
         if digest(provenance) != source.run_sha256:
             raise AnnotationError("retained run does not match current policy/prompt/schema/environment")
         if not path.exists():
@@ -185,9 +237,9 @@ def retained_labels(config, queue_name, prompt_path=PROMPT_PATH):
         inputs = read_inputs(pool, set(latest))
         if any(e.input_sha256 != digest(inputs[eid]) for eid, e in latest.items()):
             raise AnnotationError("retained input fingerprint mismatch")
-        sources.append({**source.model_dump(), "path": str(path), "file_sha256": sha256_file(path)})
+        sources.append({**source.model_dump(mode="json"), "path": str(path), "file_sha256": sha256_file(path)})
         for eid, event in latest.items():
-            if event.status == "success":
+            if event.status == "success" and (event.run_sha256, eid) not in held:
                 selected.setdefault(eid, (event, source.provider, str(path)))
     return selected, sources
 
@@ -277,15 +329,32 @@ class GeminiProvider:
         self.client.close()
 
 
-def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH, limit=None, provider=None,
+def excluded_records(config, queue_name):
+    """Read only explicitly excluded same-queue histories, never arbitrary/golden runs."""
+    result = {}
+    for run_hash, reason in config.annotation.excluded_machine_runs.items():
+        path = config.annotation.output_dir / "machine" / queue_name / f"{run_hash}.jsonl"
+        for event in load_events(path):
+            if event.queue_name != queue_name or event.run_sha256 != run_hash or digest(event.provenance) != run_hash:
+                raise AnnotationError("excluded source fingerprint mismatch")
+            result.setdefault(event.example_id, []).append({
+                "run_sha256": run_hash, "attempt": event.attempt,
+                "source_file_sha256": sha256_file(path), "reason": reason,
+                "status": "excluded; replacement does not erase original judgment"})
+    return result
+
+
+def machine_annotate(config, queue_name, *, model=None, prompt_path=None, limit=None, provider=None,
                      provider_name=None,
-                     retry_unknown_quota=False):
+                     retry_unknown_quota=False, selection_path=None):
     if limit is not None and limit < 1:
         raise AnnotationError("limit must be positive")
     queue, pool, taxonomy, system, schema, provenance, path = prepare_run(
         config, queue_name, model, prompt_path, provider_name
     )
     provider_name = provenance["provider"]
+    if digest(provenance) in config.annotation.excluded_machine_runs:
+        raise AnnotationError("active run is excluded; use an explicitly revised prompt/run")
     model = provenance["model"]
     rate = config.annotation.machine_rate
     halt_reason = None
@@ -294,6 +363,7 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
         human_store = AnnotationStore(config, queue_name)
         humans = human_store.load()
         retained, retained_sources = retained_labels(config, queue_name, prompt_path)
+        excluded = excluded_records(config, queue_name)
         events = load_events(path)
         latest = validate_events(events, provenance, set(queue.example_id), taxonomy)
         if any(e.queue_name != queue_name for e in events):
@@ -316,6 +386,15 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
                 "not retried. Correct the configuration and inspect the local run before recovery."
             )
         pending = [eid for eid in missing if eid not in latest or latest[eid].status != "success"]
+        selection_hash = None
+        if selection_path is not None:
+            selection = json.loads(selection_path.read_text(encoding="utf-8"))
+            ids = selection.get("example_ids", [])
+            if (selection.get("queue_name") != queue_name or selection.get("run_sha256") != digest(provenance)
+                    or not ids or len(ids) != len(set(ids)) or not set(ids) <= set(queue.example_id)):
+                raise AnnotationError("invalid pinned machine selection")
+            selection_hash = sha256_file(selection_path)
+            pending = [eid for eid in ids if eid in pending]
         for eid, previous in safety_latest.items():
             if eid not in missing or previous.status != "failure":
                 continue
@@ -376,6 +455,8 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
                     raise AnnotationError("guide changed during generation")
                 if human_store.load() != humans:
                     raise AnnotationError("human annotations changed; resume to recompute missing IDs")
+                if selection_path and sha256_file(selection_path) != selection_hash:
+                    raise AnnotationError("pinned selection changed during generation")
                 if any(sha256_file(Path(s["path"])) != s["file_sha256"] for s in retained_sources):
                     raise AnnotationError("retained source changed during generation")
                 decision, error, resolved_model, http_status, rate_evidence = None, None, None, None, None
@@ -425,7 +506,9 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
                     error_code=error, response_model_version=resolved_model,
                     provider_http_status=http_status,
                     rate_limit_evidence=rate_evidence,
+                    supersedes=excluded.get(eid, []),
                     request_controls={"scheduler_version": "bounded-rate-v1", **rate.model_dump(),
+                                      "selection_sha256": selection_hash,
                                       "provider_controls": getattr(provider, "last_controls", None),
                                       "unknown_quota_retry_confirmed": retry_unknown_quota},
                 )
@@ -448,7 +531,7 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
     return report
 
 
-def validate_machine_annotations(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
+def validate_machine_annotations(config, queue_name, *, model=None, prompt_path=None,
                                  provider_name=None):
     queue, pool, taxonomy, _, _, provenance, path = prepare_run(config, queue_name, model, prompt_path, provider_name)
     humans = AnnotationStore(config, queue_name).load()
@@ -481,7 +564,7 @@ def validate_machine_annotations(config, queue_name, *, model=None, prompt_path=
     }
 
 
-def combined_machine_manifest(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
+def combined_machine_manifest(config, queue_name, *, model=None, prompt_path=None,
                               provider_name=None, write=True):
     """Content-addressed local selection; stale human labels are protected, not adopted."""
     report = validate_machine_annotations(config, queue_name, model=model, prompt_path=prompt_path,
@@ -490,9 +573,12 @@ def combined_machine_manifest(config, queue_name, *, model=None, prompt_path=PRO
     humans = AnnotationStore(config, queue_name)
     human_records = humans.load()
     selected, sources = retained_labels(config, queue_name, prompt_path)
+    exclusions = record_exclusions(config, queue_name)
+    held = {(e["run_sha256"], e["example_id"]) for e in exclusions}
     latest = {e.example_id: e for e in load_events(path)}
     for eid, event in latest.items():
-        if event.status == "success":
+        if (event.status == "success" and event.run_sha256 not in config.annotation.excluded_machine_runs
+                and (event.run_sha256, eid) not in held):
             selected.setdefault(eid, (event, provenance["provider"], str(path)))
     rows = []
     for eid in queue.example_id:
@@ -512,6 +598,9 @@ def combined_machine_manifest(config, queue_name, *, model=None, prompt_path=PRO
     manifest = {"manifest_version": "mixed-machine-labels-v1", "queue": queue_name,
                 **current_contract(config), "selection_rule": "protect every human record; first configured valid retained run; active run",
                 "retained_sources": sources, "active_provenance": provenance,
+                "excluded_runs": config.annotation.excluded_machine_runs,
+                "excluded_records": exclusions,
+                "supersession_history": excluded_records(config, queue_name),
                 "active_path": str(path), "active_file_sha256": sha256_file(path) if path.exists() else None,
                 "human_csv_sha256": sha256_file(humans.label_path) if humans.label_path.exists() else None,
                 "protected_human_ids": sorted(human_records),
@@ -532,6 +621,7 @@ def combined_machine_manifest(config, queue_name, *, model=None, prompt_path=PRO
                 handle.flush()
                 os.fsync(handle.fileno())
     report.update(active_run_successes=report["validated_successes"],
+                  excluded_active_records=sum((digest(provenance), eid) in held for eid in latest),
                   validated_successes=len(rows), successes_by_provider=counts,
                   retained_successes=len(chosen - set(latest)), remaining=len(pending),
                   unresolved_failures=len(failures), not_attempted=len(pending - set(latest)),

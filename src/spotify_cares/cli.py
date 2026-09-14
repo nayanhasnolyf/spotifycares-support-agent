@@ -127,8 +127,9 @@ def build_parser() -> argparse.ArgumentParser:
         machine_parser.add_argument("--queue", choices=("training", "development"), required=True)
         machine_parser.add_argument("--model", help="override annotation.machine_model from project configuration")
         machine_parser.add_argument("--provider", choices=("gemini", "groq"), help="override annotation.machine_provider")
-        machine_parser.add_argument("--prompt", type=Path, default=Path("configs/machine_annotation_prompt.txt"))
+        machine_parser.add_argument("--prompt", type=Path, help="override the configured provider prompt")
         if command == "machine-annotate":
+            machine_parser.add_argument("--selection", type=Path, help="pinned queue/run/example IDs; resumes cannot extend this selection")
             machine_parser.add_argument("--limit", type=int, help="maximum attempts this invocation; rerun to resume")
             machine_parser.add_argument("--retry-unknown-quota", action="store_true",
                                         help="explicitly retry a saved ambiguous 429 after checking quota; no automatic unknown-limit retries")
@@ -159,7 +160,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         try:
             operation = machine_annotate if args.command == "machine-annotate" else combined_machine_manifest
-            options = {"limit": args.limit, "retry_unknown_quota": args.retry_unknown_quota} if args.command == "machine-annotate" else {}
+            options = {"limit": args.limit, "retry_unknown_quota": args.retry_unknown_quota,
+                       "selection_path": args.selection} if args.command == "machine-annotate" else {}
             if args.command == "validate-machine-annotations":
                 options["write"] = False
             report = operation(load_config(args.config), args.queue, model=args.model,
