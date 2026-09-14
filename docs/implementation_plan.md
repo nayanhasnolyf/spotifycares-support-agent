@@ -118,6 +118,29 @@ development remains 0 successes / 0 failures / 80 unattempted. No classifier wor
 Verification: 82 tests passed; CLI help and compilation checks passed; all 40
 protected local artifact hashes (including machine output) remain unchanged.
 
+Optional Groq follow-up (2026-09-14 local date): provider/model selection, strict
+JSON-schema transport, persistent request/token reservations, safe quota headers,
+bounded retries, and explicit combined-label manifests are implemented. Legacy
+Gemini outputs remain unchanged and explicitly selected, never implicitly scanned.
+The authenticated account lists `openai/gpt-oss-20b`; one real completion exercised
+the exact schema. Headers report 8,000 TPM and 1,000 RPD, not verified RPM/TPD.
+The five-example smoke test stopped after one schema-valid response because the
+conservative input + maximum output reservation exceeds the observed TPM cap.
+AI-assisted inspection also found an unsupported account-access intent and an
+account-review offer inconsistent with non-escalation guidance. No label was edited;
+this is a review finding, not a human rating or measured accuracy. Do not expand
+generation until the smoke concerns and per-request budget are resolved explicitly.
+Actual combined training: 12 structurally valid labels (11 Gemini, 1 Groq), zero
+Groq failed completions, 258 pending, 30 protected stale humans. Development: zero
+labels/failures, 80 pending. Golden, frozen policy, human revisions remain unchanged.
+Next unfinished action: review the local smoke finding and choose an explicit
+policy-compliant generation/prompt budget change, preserving this run and binding
+any new settings to new provenance. No classifier training or evaluation.
+Verification: 99 tests passed, compilation and whitespace checks passed, and both
+real queue validators report structurally valid but incomplete outputs. All 39
+pre-existing protected annotation artifacts are byte-for-byte unchanged. The new
+Groq output, budget ledger, combined snapshots, and AI-assisted review stay ignored.
+
 ## Stage 5 — Golden-set annotation (freeze satisfied; human work outstanding)
 
 Randomly select and genuinely hand-label a target of 200 examples (allowed range: 150–250). Preserve stable IDs and provenance. Double-label a subset to measure agreement and adjudicate disagreements without producing model predictions for the golden set.

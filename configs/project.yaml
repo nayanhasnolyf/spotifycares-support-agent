@@ -48,8 +48,21 @@ annotation:
   golden_challenge_size: 50
   training_pilot_size: 30
   machine_model: gemini-2.5-flash
+  machine_provider: gemini
+  groq_model: openai/gpt-oss-20b
+  # RPM is an operator ceiling. TPM/RPD were observed live and may change.
+  groq_rate:
+    requests_per_minute: 5
+    tokens_per_minute: 8000
+    requests_per_day: 1000
+  retained_machine_runs:
+    - queue: training
+      provider: gemini
+      model: gemini-2.5-flash
+      run_sha256: 7ca82b285845f6cfdbf6f4dffc4a89d083bb0101959997718f602c45bf28fb4e
+      legacy_gemini: true
   machine_rate:
-    request_interval_seconds: 10
+    request_interval_seconds: 15
     max_retries: 2
     initial_backoff_seconds: 5
     max_backoff_seconds: 30

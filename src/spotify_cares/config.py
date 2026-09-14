@@ -1,6 +1,7 @@
 """Typed loading for the central project configuration."""
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -76,6 +77,24 @@ class MachineRateSettings(StrictModel):
         return self
 
 
+class RetainedMachineRun(StrictModel):
+    queue: Literal["training", "development"]
+    provider: Literal["gemini", "groq"]
+    model: str = Field(min_length=1)
+    run_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    legacy_gemini: bool = False
+
+
+class GroqRateSettings(StrictModel):
+    # Operator ceilings, NOT claims about the authenticated organization's limits.
+    requests_per_minute: int = Field(default=5, gt=0)
+    tokens_per_minute: int = Field(default=30000, gt=0)
+    input_tokens_per_minute: int | None = Field(default=None, gt=0)
+    output_tokens_per_minute: int | None = Field(default=None, gt=0)
+    requests_per_day: int | None = Field(default=None, gt=0)
+    tokens_per_day: int | None = Field(default=None, gt=0)
+
+
 class AnnotationSettings(StrictModel):
     taxonomy_path: Path
     guide_path: Path
@@ -87,6 +106,10 @@ class AnnotationSettings(StrictModel):
     golden_challenge_size: int
     training_pilot_size: int
     machine_model: str | None = None
+    machine_provider: Literal["gemini", "groq"] = "gemini"
+    groq_model: str = "openai/gpt-oss-20b"
+    groq_rate: GroqRateSettings = Field(default_factory=GroqRateSettings)
+    retained_machine_runs: list[RetainedMachineRun] = Field(default_factory=list)
     machine_rate: MachineRateSettings = Field(default_factory=MachineRateSettings)
 
     @model_validator(mode="after")

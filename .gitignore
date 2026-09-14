@@ -9,6 +9,7 @@ htmlcov/
 .venv/
 .uv-cache/
 .uv-python/
+.cache/tiktoken/
 
 # Local settings and secrets
 .env

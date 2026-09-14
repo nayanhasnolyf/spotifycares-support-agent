@@ -224,7 +224,7 @@ validate both queues. Existing successes remain skipped; no failed example is
 marked complete or excluded to bypass a quota error.
 
 Scheduling settings are under `annotation.machine_rate` in `configs/project.yaml`:
-10 seconds between request starts, at most two automatic retries per example,
+15 seconds between request starts (updated after the owner's 5-RPM dashboard), at most two automatic retries per example,
 5-second exponential base capped at 30 seconds with up to 1 second of jitter,
 30-second maximum individual wait, and 60 seconds total retry-wait budget per run.
 These are conservative operational defaults, not inferred project quota values.
@@ -251,3 +251,140 @@ the complete existing machine JSONL, human records, assistance history, frozen
 state, golden queue, and split assignments, are unchanged. Both actual output
 validators still report 11/270 training successes and 0/80 development successes
 under the same run hashes; this diagnosis did not spend quota or refresh labels.
+
+## Optional Groq and explicit mixed-provider selection
+
+Groq is optional; Gemini remains supported and the default provider. Select
+`--provider groq` or set `annotation.machine_provider: groq`. Groq uses
+`annotation.groq_model` (`openai/gpt-oss-20b`); Gemini uses `machine_model`.
+`--model` explicitly overrides either provider's model. There is no automatic
+model/provider fallback. Do not switch defaults or expand generation while the
+smoke review below is unresolved.
+
+Configure `GROQ_API_KEY` in the existing ignored project-root `.env`, alongside
+`GEMINI_API_KEY`. Never copy the example over an existing credential file, paste
+keys into chat, or commit `.env`. Invoke the CLI with `uv run --env-file .env`.
+
+Official sources checked for this implementation:
+
+- [Groq supported models](https://console.groq.com/docs/models) lists GPT-OSS 20B;
+  the authenticated `/models` endpoint also listed it for these credentials.
+- [Groq structured outputs](https://console.groq.com/docs/structured-outputs)
+  supports strict JSON schema for GPT-OSS 20B and 120B. The adapter supplies the
+  same taxonomy-constrained Pydantic schema and validates responses locally.
+- [Groq rate limits](https://console.groq.com/docs/rate-limits) distinguishes
+  organization limits from published examples: request headers mean RPD and token
+  headers mean TPM. RPM, TPD, and possible separate input/output caps require
+  account evidence; the advertised limits are not assumed to be this account's.
+- [GPT-OSS tokenizer source](https://github.com/openai/gpt-oss/blob/main/gpt_oss/tokenizer.py)
+  establishes the Harmony tokenizer family used for local reservations.
+
+New v3 runs record provider, requested model, transport/library version, frozen
+policy hashes, prompt/schema/input/queue hashes, and actual generation settings.
+Groq uses temperature 0, low reasoning effort, a 2,048-token completion cap, no
+streaming, and strict JSON schema. Refusals, truncated outputs, invalid fields,
+provider failures, and unknown limits never produce substitute labels.
+
+The original v2 Gemini JSONL is not migrated or rewritten. Its provider is
+explicitly declared in `annotation.retained_machine_runs`, with its run hash and
+model. The combined loader validates its original provenance, input fingerprints,
+and decisions, then skips its successful IDs. Its failed ID remained pending and
+was the first Groq request. An unchanged failed Gemini event remains in history.
+
+Selection order is explicit: protect every human record, then choose the first
+valid configured retained source, then the active run. No glob-based provider
+mixing occurs. Each ignored, content-addressed combined manifest pins source file
+hashes, record hashes, input IDs, models, provider names, protected human IDs, and
+remaining IDs. It contains at most one selected machine label per example. Old
+human labels are not adopted or silently upgraded. Schema-valid selection is not
+semantic approval or authorization to train.
+
+Run histories stay separate under `data/labels/annotation/machine/<queue>/<hash>.jsonl`;
+provider is part of the new run hash. Combined manifests live under
+`machine/combined/<queue>/`. To adopt another run after an intentional model/prompt
+change, review and configure its source explicitly; don't remove history or
+regenerate existing successful IDs to conceal changes. Current retained-source
+validation fails closed on policy/prompt/environment drift rather than adopting
+incompatible labels. Missing configured local sources also block generation.
+
+### Request and token scheduling
+
+`annotation.groq_rate` has operator RPM/TPM ceilings and optional RPD/TPD and
+input/output TPM caps. Current settings use 5 RPM as an operator ceiling, with
+8,000 TPM and 1,000 RPD observed in the live response. The account's RPM and TPD
+remain unverified. The global machine lock serializes providers and queues.
+
+Groq's ignored append-only budget ledger reserves each request before sending it,
+surviving process restarts and spanning training/development. Minute windows count
+requests plus token reservations; optional daily ceilings use conservative rolling
+24-hour accounting. Token reservation includes the serialized prompt and schema,
+local `o200k_harmony` tokens plus 10% and 512 framing tokens, and the maximum
+completion budget. This is conservative scheduling, not measured billed usage.
+Tokenizer files stay under ignored `.cache/tiktoken`.
+
+Observed headers can lower ceilings, never raise them automatically. Insufficient
+remaining allowance honors reset timing; missing reset evidence stops for review.
+Identified temporary errors receive bounded backoff/jitter and server minimum
+waits; long waits defer. Daily/billing/permanent errors stop without deleting
+outputs, and require review before recovery. Do not delete ledger history to
+bypass a stop. This scheduler cannot coordinate other clients in the organization,
+so concurrent external usage can still trigger an API limit.
+
+### Actual live smoke checkpoint
+
+The owner configured the key locally. Account listing and one live strict-schema
+completion succeeded. Response headers showed 8,000 TPM, 1,000 RPD, and 999 remaining
+daily requests at that response timestamp, not a guarantee of current availability.
+The first request reserved 7,036 input tokens plus 2,048 output tokens (9,084 total).
+After learning the 8,000 TPM limit, the next request stopped locally because its
+conservative single-request reservation could not fit. There was no Groq HTTP
+error and no failed label was fabricated for the unsent request.
+
+The saved result passed schema, enum, input, and frozen-provenance checks. Its
+AI-assisted semantic review found two concerns: an account-access intent unsupported
+by the visible entitlement issue, and reply guidance offering account review while
+choosing no escalation. Safe self-service clarification itself may be allowed;
+the review does not establish a replacement human judgment. The detailed finding
+is local/ignored at `machine/reviews/groq_smoke_review.json`. No label was edited.
+
+Actual counts: 1/5 Groq smoke responses obtained, zero Groq failed completions;
+training has 11 Gemini + 1 Groq schema-valid labels, 30 protected stale human
+records, and 258 pending machine labels. Development has zero labels/failures and
+80 pending. The old Gemini failure remains recorded, with a structurally valid
+Groq output now covering that ID. This is an incomplete smoke test with concerns,
+not measured annotation accuracy. No full run, development request, classifier
+training, evaluation, or golden access occurred.
+
+The next step is to review these concerns and the per-request token budget. A
+smaller output cap or revised prompt must be explicit, with new run provenance
+and retained-source handling; it was not silently applied during this test.
+Read-only commands now:
+
+```powershell
+uv run spotify-cares validate-machine-annotations --queue training --provider groq
+uv run spotify-cares validate-machine-annotations --queue development --provider groq
+uv run spotify-cares guide-status
+```
+
+Commands available for later use, **not authorization to bypass the smoke checkpoint**:
+
+```powershell
+uv run --env-file .env spotify-cares check-groq
+uv run --env-file .env spotify-cares machine-annotate --queue training --provider groq --limit 5
+uv run spotify-cares combine-machine-annotations --queue training --provider groq
+# Only after the smoke checkpoint succeeds and account budgets are suitable:
+uv run --env-file .env spotify-cares machine-annotate --queue training --provider groq
+uv run --env-file .env spotify-cares machine-annotate --queue development --provider groq
+```
+
+`--limit` bounds attempts, not guaranteed successes; automatic retries consume it.
+Resume excludes retained and active successes and protects every human record.
+Machine-labelled development scores would measure model agreement, never independent
+human accuracy. The golden set still requires genuine human annotation.
+
+Verification: 99 tests passed, including 17 synthetic Groq/mixed-provider cases;
+compilation and whitespace checks passed. Actual validators confirm 12/270
+structurally valid machine training labels and 0/80 development labels, so both
+remain incomplete. All 39 pre-existing protected annotation artifacts are unchanged.
+Frozen taxonomy SHA-256: `15809663951befd9688aae18c301d85f159d3d95d22e153ce754f949b9b7a688`.
+Frozen guide SHA-256: `3cc6c56f8b954e12000eeec501d1bdd4b1f1a6a123a53aa10faf7868e27016c3`.

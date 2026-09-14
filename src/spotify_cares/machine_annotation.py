@@ -27,7 +27,7 @@ from spotify_cares.rate_limits import RateEvidence, extract_rate_evidence, retry
 PROMPT_PATH = Path("configs/machine_annotation_prompt.txt")
 ALLOWED_QUEUES = ("training", "development")
 GENERATION_SETTINGS = {"temperature": 0, "max_output_tokens": 2048}
-PERMANENT_HTTP_ERRORS = {400, 401, 403, 404, 405, 410, 422}
+PERMANENT_HTTP_ERRORS = {400, 401, 403, 404, 405, 410, 413, 422}
 
 
 def canonical(value) -> str:
@@ -106,12 +106,18 @@ def validate_decision(decision: MachineDecision, taxonomy) -> None:
         raise ValueError("unknown risk flag")
 
 
-def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_path: Path):
+def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_path: Path,
+                provider_name=None, legacy_gemini=False):
     # Check before any queue, label, or input reads, including training.
     if queue_name not in ALLOWED_QUEUES:
         raise AnnotationError("machine annotation permits only training/development")
     assert_queue_access(config, "development")  # matching frozen policy for both queues
-    model = model if model is not None else config.annotation.machine_model
+    provider_name = provider_name or config.annotation.machine_provider
+    if provider_name not in {"gemini", "groq"} or (legacy_gemini and provider_name != "gemini"):
+        raise AnnotationError("invalid provider/legacy selection")
+    model = model if model is not None else (
+        config.annotation.groq_model if provider_name == "groq" else config.annotation.machine_model
+    )
     if not model or not model.strip():
         raise AnnotationError("configure annotation.machine_model or supply --model")
     contract = current_contract(config)
@@ -144,9 +150,46 @@ def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_pa
         "generation_settings": GENERATION_SETTINGS,
         "development_interpretation": "model agreement, not independent human accuracy",
     }
+    if not legacy_gemini:
+        provenance.update(workflow_version="machine-annotation-v3", provider=provider_name)
+        if provider_name == "groq":
+            from spotify_cares.groq_annotation import GROQ_GENERATION_SETTINGS
+            provenance.pop("google_genai_version")
+            provenance.update(httpx_version=version("httpx"),
+                              generation_settings=GROQ_GENERATION_SETTINGS,
+                              transport="groq-chat-completions-json-schema-strict-v1")
     run_hash = digest(provenance)
     path = config.annotation.output_dir / "machine" / queue_name / f"{run_hash}.jsonl"
     return queue, pool_path, taxonomy, system, schema, provenance, path
+
+
+def retained_labels(config, queue_name, prompt_path=PROMPT_PATH):
+    """Explicit ordered sources only; never scan and silently merge arbitrary runs."""
+    selected, sources, seen = {}, [], set()
+    for source in config.annotation.retained_machine_runs:
+        if source.queue != queue_name:
+            continue
+        if source.run_sha256 in seen:
+            raise AnnotationError("duplicate retained run")
+        seen.add(source.run_sha256)
+        queue, pool, taxonomy, _, _, provenance, path = prepare_run(
+            config, queue_name, source.model, prompt_path, source.provider, source.legacy_gemini)
+        if digest(provenance) != source.run_sha256:
+            raise AnnotationError("retained run does not match current policy/prompt/schema/environment")
+        if not path.exists():
+            raise AnnotationError("configured retained run is missing locally; restore it before generation")
+        events = load_events(path)
+        latest = validate_events(events, provenance, set(queue.example_id), taxonomy)
+        if any(e.queue_name != queue_name for e in events):
+            raise AnnotationError("retained queue mismatch")
+        inputs = read_inputs(pool, set(latest))
+        if any(e.input_sha256 != digest(inputs[eid]) for eid, e in latest.items()):
+            raise AnnotationError("retained input fingerprint mismatch")
+        sources.append({**source.model_dump(), "path": str(path), "file_sha256": sha256_file(path)})
+        for eid, event in latest.items():
+            if event.status == "success":
+                selected.setdefault(eid, (event, source.provider, str(path)))
+    return selected, sources
 
 
 def load_events(path: Path) -> list[MachineRecord]:
@@ -235,24 +278,37 @@ class GeminiProvider:
 
 
 def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH, limit=None, provider=None,
+                     provider_name=None,
                      retry_unknown_quota=False):
     if limit is not None and limit < 1:
         raise AnnotationError("limit must be positive")
     queue, pool, taxonomy, system, schema, provenance, path = prepare_run(
-        config, queue_name, model, prompt_path
+        config, queue_name, model, prompt_path, provider_name
     )
+    provider_name = provenance["provider"]
     model = provenance["model"]
     rate = config.annotation.machine_rate
     halt_reason = None
-    with run_lock(path):
+    # Serializes providers and queues, protecting combined selection and quota ledger.
+    with run_lock(config.annotation.output_dir / "machine" / "generation"), run_lock(path):
         human_store = AnnotationStore(config, queue_name)
         humans = human_store.load()
+        retained, retained_sources = retained_labels(config, queue_name, prompt_path)
         events = load_events(path)
         latest = validate_events(events, provenance, set(queue.example_id), taxonomy)
         if any(e.queue_name != queue_name for e in events):
             raise AnnotationError("machine queue mismatch")
-        missing = [eid for eid in queue.example_id if eid not in humans]
-        permanent = [e for eid, e in latest.items() if eid in missing
+        missing = [eid for eid in queue.example_id if eid not in humans and eid not in retained]
+        # A new provenance format is not permission to bypass the same provider's
+        # saved permanent/unknown-quota error. Groq does not inherit Gemini quota.
+        inherited_failures = {}
+        for source in retained_sources:
+            if source["provider"] == provider_name and source["model"] == model:
+                prior = {e.example_id: e for e in load_events(Path(source["path"]))}
+                inherited_failures.update({eid: e for eid, e in prior.items()
+                                           if eid in missing and eid not in latest and e.status == "failure"})
+        safety_latest = {**inherited_failures, **latest}
+        permanent = [e for eid, e in safety_latest.items() if eid in missing
                      and e.status == "failure" and e.provider_http_status in PERMANENT_HTTP_ERRORS]
         if permanent:
             raise AnnotationError(
@@ -260,7 +316,7 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
                 "not retried. Correct the configuration and inspect the local run before recovery."
             )
         pending = [eid for eid in missing if eid not in latest or latest[eid].status != "success"]
-        for eid, previous in latest.items():
+        for eid, previous in safety_latest.items():
             if eid not in missing or previous.status != "failure":
                 continue
             evidence = previous.rate_limit_evidence
@@ -276,14 +332,18 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
         owned_provider = provider is None and bool(pending)
         # Pacing changes preserve the run hash; successes are never regenerated.
         for eid in pending:
-            previous = latest.get(eid)
+            previous = safety_latest.get(eid)
             evidence = previous.rate_limit_evidence if previous else None
             if evidence and evidence.retry_not_before:
                 wait = max(0, (evidence.retry_not_before - datetime.now(timezone.utc)).total_seconds())
                 if wait > rate.max_single_wait_seconds or wait > rate.max_total_retry_wait_seconds:
                     raise AnnotationError(f"server retry wait is still {wait:.1f}s; defer and resume later")
         if owned_provider:
-            provider = GeminiProvider()
+            if provider_name == "groq":
+                from spotify_cares.groq_annotation import GroqProvider
+                provider = GroqProvider(config)
+            else:
+                provider = GeminiProvider()
         try:
             work = deque(pending)
             retries, waited, calls, last_started = {}, 0.0, 0, None
@@ -292,7 +352,7 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
                 last_started = time.monotonic() - elapsed
             while work and (limit is None or calls < limit):
                 eid = work.popleft()
-                previous = latest.get(eid)
+                previous = latest.get(eid, inherited_failures.get(eid))
                 evidence = previous.rate_limit_evidence if previous else None
                 wait = 0.0
                 if previous and previous.status == "failure" and evidence and evidence.category == "temporary":
@@ -316,18 +376,26 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
                     raise AnnotationError("guide changed during generation")
                 if human_store.load() != humans:
                     raise AnnotationError("human annotations changed; resume to recompute missing IDs")
+                if any(sha256_file(Path(s["path"])) != s["file_sha256"] for s in retained_sources):
+                    raise AnnotationError("retained source changed during generation")
                 decision, error, resolved_model, http_status, rate_evidence = None, None, None, None, None
                 last_started = time.monotonic()
                 calls += 1
                 try:
                     raw, resolved_model = provider(model=model, system=system, schema=schema, message=inputs[eid])
                 except Exception as exc:
+                    from spotify_cares.groq_annotation import ProviderPause, GroqHTTPError
+                    if isinstance(exc, ProviderPause):
+                        halt_reason = str(exc)
+                        break  # No attempted label: still pending; reservations remain conservative.
                     error = "provider_error"
                     # Never persist or print exception text, which may echo credentials/input.
                     from google.genai.errors import APIError
                     if isinstance(exc, APIError) and isinstance(exc.code, int) and 100 <= exc.code <= 599:
                         http_status = exc.code
                         rate_evidence = extract_rate_evidence(exc, http_status)
+                    elif isinstance(exc, GroqHTTPError):
+                        http_status, rate_evidence = exc.status, exc.evidence
                 else:
                     if not raw:
                         error = "empty_output"
@@ -346,6 +414,8 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
                     raise AnnotationError("queue changed during generation; response discarded")
                 if human_store.load() != humans:
                     raise AnnotationError("human annotations changed; response discarded")
+                if any(sha256_file(Path(s["path"])) != s["file_sha256"] for s in retained_sources):
+                    raise AnnotationError("retained source changed; response discarded")
                 record = MachineRecord(
                     queue_name=queue_name, example_id=eid, input_sha256=digest(inputs[eid]),
                     run_sha256=digest(provenance), provenance=provenance,
@@ -356,12 +426,13 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
                     provider_http_status=http_status,
                     rate_limit_evidence=rate_evidence,
                     request_controls={"scheduler_version": "bounded-rate-v1", **rate.model_dump(),
+                                      "provider_controls": getattr(provider, "last_controls", None),
                                       "unknown_quota_retry_confirmed": retry_unknown_quota},
                 )
                 _append_jsonl(path, record.model_dump(mode="json"))
                 latest[eid] = record
                 if error == "provider_error":
-                    if http_status == 429 and rate_evidence and rate_evidence.category == "temporary" and retries.get(eid, 0) < rate.max_retries:
+                    if (http_status == 429 or http_status in {500, 502, 503, 504}) and rate_evidence and rate_evidence.category == "temporary" and retries.get(eid, 0) < rate.max_retries:
                         retries[eid] = retries.get(eid, 0) + 1
                         work.appendleft(eid)
                         continue
@@ -371,13 +442,15 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
         finally:
             if owned_provider:
                 provider.close()
-    report = validate_machine_annotations(config, queue_name, model=model, prompt_path=prompt_path)
+    report = combined_machine_manifest(config, queue_name, model=model, prompt_path=prompt_path,
+                                      provider_name=provider_name)
     report["halt_reason"] = halt_reason
     return report
 
 
-def validate_machine_annotations(config, queue_name, *, model=None, prompt_path=PROMPT_PATH):
-    queue, pool, taxonomy, _, _, provenance, path = prepare_run(config, queue_name, model, prompt_path)
+def validate_machine_annotations(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
+                                 provider_name=None):
+    queue, pool, taxonomy, _, _, provenance, path = prepare_run(config, queue_name, model, prompt_path, provider_name)
     humans = AnnotationStore(config, queue_name).load()
     events = load_events(path)
     latest = validate_events(events, provenance, set(queue.example_id), taxonomy)
@@ -406,3 +479,61 @@ def validate_machine_annotations(config, queue_name, *, model=None, prompt_path=
         "complete": successes == missing,
         "interpretation": "machine-label validation only; development scores would be model agreement, not independent human accuracy",
     }
+
+
+def combined_machine_manifest(config, queue_name, *, model=None, prompt_path=PROMPT_PATH,
+                              provider_name=None, write=True):
+    """Content-addressed local selection; stale human labels are protected, not adopted."""
+    report = validate_machine_annotations(config, queue_name, model=model, prompt_path=prompt_path,
+                                          provider_name=provider_name)
+    queue, _, _, _, _, provenance, path = prepare_run(config, queue_name, model, prompt_path, provider_name)
+    humans = AnnotationStore(config, queue_name)
+    human_records = humans.load()
+    selected, sources = retained_labels(config, queue_name, prompt_path)
+    latest = {e.example_id: e for e in load_events(path)}
+    for eid, event in latest.items():
+        if event.status == "success":
+            selected.setdefault(eid, (event, provenance["provider"], str(path)))
+    rows = []
+    for eid in queue.example_id:
+        if eid in human_records or eid not in selected:
+            continue
+        event, provider, source_path = selected[eid]
+        rows.append({"example_id": eid, "annotation_source": "machine_annotated",
+                     "provider": provider, "model": event.provenance["model"],
+                     "run_sha256": event.run_sha256, "record_sha256": digest(event.model_dump(mode="json")),
+                     "input_sha256": event.input_sha256, "source_path": source_path,
+                     "attempt": event.attempt})
+    chosen = {r["example_id"] for r in rows}
+    pending = set(queue.example_id) - set(human_records) - chosen
+    failures = {eid for eid in pending if eid in latest and latest[eid].status == "failure"}
+    # Retained failures remain pending, even though no failure has occurred on this provider.
+    counts = {p: sum(r["provider"] == p for r in rows) for p in ("gemini", "groq")}
+    manifest = {"manifest_version": "mixed-machine-labels-v1", "queue": queue_name,
+                **current_contract(config), "selection_rule": "protect every human record; first configured valid retained run; active run",
+                "retained_sources": sources, "active_provenance": provenance,
+                "active_path": str(path), "active_file_sha256": sha256_file(path) if path.exists() else None,
+                "human_csv_sha256": sha256_file(humans.label_path) if humans.label_path.exists() else None,
+                "protected_human_ids": sorted(human_records),
+                "human_policy": "not selected here; preserve original versions and stale status",
+                "readiness": "schema/input/provenance validation only; not semantic approval or training authorization",
+                "selected_labels": rows, "pending_ids": sorted(pending),
+                "interpretation": report["interpretation"]}
+    manifest_path = config.annotation.output_dir / "machine" / "combined" / queue_name / f"{digest(manifest)}.json"
+    if write:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = canonical(manifest) + "\n"
+        if manifest_path.exists():
+            if manifest_path.read_text(encoding="utf-8") != payload:
+                raise AnnotationError("combined manifest was modified")
+        else:
+            with manifest_path.open("x", encoding="utf-8", newline="\n") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+    report.update(active_run_successes=report["validated_successes"],
+                  validated_successes=len(rows), successes_by_provider=counts,
+                  retained_successes=len(chosen - set(latest)), remaining=len(pending),
+                  unresolved_failures=len(failures), not_attempted=len(pending - set(latest)),
+                  complete=not pending, combined_manifest=str(manifest_path))
+    return report

@@ -118,11 +118,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CONFIG,
         help=f"configuration file (default: {DEFAULT_CONFIG})",
     )
-    for command in ("machine-annotate", "validate-machine-annotations"):
+    groq_parser = commands.add_parser("check-groq", help="check authenticated model listing; no customer messages")
+    groq_parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    groq_parser.add_argument("--model")
+    for command in ("machine-annotate", "validate-machine-annotations", "combine-machine-annotations"):
         machine_parser = commands.add_parser(command, help="frozen-policy machine labels, never golden")
         machine_parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
         machine_parser.add_argument("--queue", choices=("training", "development"), required=True)
         machine_parser.add_argument("--model", help="override annotation.machine_model from project configuration")
+        machine_parser.add_argument("--provider", choices=("gemini", "groq"), help="override annotation.machine_provider")
         machine_parser.add_argument("--prompt", type=Path, default=Path("configs/machine_annotation_prompt.txt"))
         if command == "machine-annotate":
             machine_parser.add_argument("--limit", type=int, help="maximum attempts this invocation; rerun to resume")
@@ -135,17 +139,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.command in ("machine-annotate", "validate-machine-annotations"):
+    if args.command == "check-groq":
         import json
         from spotify_cares.annotation import AnnotationError
         from spotify_cares.config import load_config
-        from spotify_cares.machine_annotation import machine_annotate, validate_machine_annotations
+        from spotify_cares.groq_annotation import check_groq
+        try:
+            print(json.dumps(check_groq(load_config(args.config), args.model), indent=2))
+        except AnnotationError as error:
+            print(f"blocked: {error}")
+            return 2
+        return 0
+
+    if args.command in ("machine-annotate", "validate-machine-annotations", "combine-machine-annotations"):
+        import json
+        from spotify_cares.annotation import AnnotationError
+        from spotify_cares.config import load_config
+        from spotify_cares.machine_annotation import machine_annotate, combined_machine_manifest
 
         try:
-            operation = machine_annotate if args.command == "machine-annotate" else validate_machine_annotations
+            operation = machine_annotate if args.command == "machine-annotate" else combined_machine_manifest
             options = {"limit": args.limit, "retry_unknown_quota": args.retry_unknown_quota} if args.command == "machine-annotate" else {}
+            if args.command == "validate-machine-annotations":
+                options["write"] = False
             report = operation(load_config(args.config), args.queue, model=args.model,
-                               prompt_path=args.prompt, **options)
+                               prompt_path=args.prompt, provider_name=args.provider, **options)
         except AnnotationError as error:
             print(f"blocked: {error}")
             return 2

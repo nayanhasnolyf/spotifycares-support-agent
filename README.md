@@ -2,7 +2,7 @@
 
 This repository is the staged implementation of a Hiver SDE Intern take-home assignment. It will use real SpotifyCares conversations from Kaggle's `thoughtvector/customer-support-on-twitter` dataset to classify support intents, retrieve relevant historical conversations, draft grounded replies, and decide whether each case can be auto-handled or needs a human.
 
-Stages 1 through 3 are complete. The owner-approved v0.2 policy is frozen locally. The 30 completed, partly AI-assisted training annotations retain their older versions and remain stale, not silently re-reviewed. Live `gemini-2.5-flash` annotation has 11 validated machine-labelled training examples, one failed attempt (HTTP 429), and 258 unattempted examples; development remains 0/80 and golden remains human-only and untouched. Generation is incomplete and paused on rate/quota limiting. No classifier training or evaluation has run. All source-derived text remains Git-ignored. See [the frozen-policy and machine workflow](docs/machine_annotation.md).
+Stages 1 through 3 are complete. The approved v0.2 policy is frozen locally; all 30 partly AI-assisted human labels remain prior-version and stale. Optional Groq annotation is implemented alongside Gemini. Training has 11 preserved Gemini labels and one schema-valid Groq label, with 258 further machine labels missing; development remains 0/80. The five-example Groq smoke test is incomplete: token budgeting paused generation, and AI-assisted review found policy-consistency concerns. It is not approved for expansion or measured accuracy. Golden remains untouched; no classifier training or evaluation has run. See [the machine workflow and live checkpoint](docs/machine_annotation.md#optional-groq-and-explicit-mixed-provider-selection). Source-derived text stays ignored.
 
 The saved 429 lacks quota and retry details, so its limit type/reset time is unknown.
 The runner now captures safe quota evidence and supports paced, bounded temporary
@@ -20,18 +20,18 @@ uv run spotify-cares --help
 uv run pytest
 ```
 
-For later Gemini-powered stages, create a local environment file and add your own API key:
+For provider-backed stages, create a local environment file only if it does not already exist, then edit its keys locally:
 
 ```bash
 cp .env.example .env
 ```
 
-On PowerShell, use `Copy-Item .env.example .env` instead. The `.env` file and raw data are ignored by Git.
+On PowerShell, use `if (!(Test-Path .env)) { Copy-Item .env.example .env }`. Set `GEMINI_API_KEY` and/or `GROQ_API_KEY` there. Never overwrite an existing `.env` or share its values. Credentials and raw data are ignored by Git.
 
 ## Current CLI
 
 ```text
-usage: spotify-cares [-h] [--version] {config,extract,preprocess,validate-splits,prepare-annotations,validate-annotations,extend-training-queue,guide-status,freeze-guide,machine-annotate,validate-machine-annotations} ...
+usage: spotify-cares [-h] [--version] {config,extract,preprocess,validate-splits,prepare-annotations,validate-annotations,extend-training-queue,guide-status,freeze-guide,check-groq,machine-annotate,validate-machine-annotations,combine-machine-annotations} ...
 
 SpotifyCares support-agent project tools.
 ```
