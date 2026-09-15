@@ -1,0 +1,12 @@
+provider: groq
+model: openai/gpt-oss-20b
+embedding_revision: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41
+cache_dir: artifacts/semantic
+model_cache: .cache/huggingface/hub
+top_k: 5
+min_similarity: 0.35
+threshold_status: untuned
+max_output_tokens: 1024
+max_retries: 1
+max_wait_seconds: 30
+batch_size: 64

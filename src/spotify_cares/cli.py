@@ -142,12 +142,42 @@ def build_parser() -> argparse.ArgumentParser:
             baseline_parser.add_argument("--context", action="append", default=[])
             baseline_parser.add_argument("--baseline", choices=("trivial", "tfidf"), default="tfidf")
             baseline_parser.add_argument("--output", type=Path, help="new local JSONL file under artifacts; never overwrite")
+    agent_parser = commands.add_parser("agent-demo", help="provisional semantic agent; sending disabled")
+    agent_parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    agent_parser.add_argument("--baselines", type=Path, default=Path("configs/baselines.yaml"))
+    agent_parser.add_argument("--settings", type=Path, default=Path("configs/agent.yaml"))
+    agent_parser.add_argument("--message", required=True)
+    agent_parser.add_argument("--context", action="append", default=[])
+    agent_parser.add_argument("--output", type=Path, help="new ignored artifacts JSONL; no overwrite")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "agent-demo":
+        import json
+        from spotify_cares.annotation import AnnotationError
+        from spotify_cares.config import load_config
+        from spotify_cares.baselines import load_settings
+        from spotify_cares.agent import load_agent_settings, run_agent
+        try:
+            config = load_config(args.config)
+            if args.output and (not args.output.resolve().is_relative_to(config.artifacts.directory.resolve()) or args.output.exists()):
+                raise AnnotationError("output must be a new file under ignored artifacts")
+            if not args.message.strip():
+                raise AnnotationError("message must not be empty")
+            result = run_agent(config, load_settings(args.baselines), load_agent_settings(args.settings), args.message, args.context)
+            if args.output:
+                args.output.parent.mkdir(parents=True,exist_ok=True)
+                with args.output.open("x",encoding="utf-8") as handle:
+                    handle.write(json.dumps(result,ensure_ascii=False)+"\n")
+            print(json.dumps(result,indent=2,ensure_ascii=False))
+            return 1 if result["fallback"] else 0
+        except (AnnotationError, ValueError, OSError) as error:
+            print(f"blocked: {error}")
+            return 2
 
     if args.command in ("baseline-demo", "baseline-inspect"):
         import json
