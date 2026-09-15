@@ -1,5 +1,77 @@
 # Policy approval and machine annotation
 
+## Classification-only bounded experiment
+
+The owner authorized one experiment containing three previously held training
+cases and five new training cases. The new IDs were selected before viewing
+their messages or outputs, using the lowest SHA-256 values of
+`classification-v1-new-training:` plus each eligible ID, excluding every human
+record and every previously attempted machine ID. The ignored selection file
+pins all eight IDs, the run hash and `one_attempt_per_example: true`.
+
+Prompt `spotify-machine-v3-classification` requests only intent, escalation,
+reason code, ambiguity and a short evidence-based rationale. Machine storage
+allows optional guidance but generation does not request it. Older full-schema
+records remain readable, and omitted risk flags are not negative risk labels.
+The frozen taxonomy and guide are unchanged. The model remains
+`openai/gpt-oss-20b`, temperature 0, low reasoning, 1,024 maximum output tokens.
+Reservations still expire after 60 seconds without speculative token refunds.
+
+The previous Gemini run remains retained. The prior Groq v2 run is now explicitly
+retained under its original prompt/profile/schema/settings, with its three held
+records excluded. New attempts record explicit supersession of held originals;
+they never overwrite those originals. New run:
+`a056fc3bd6b9fcc929a3d7d57f410b1f681017716a91c8b91168b0b45bd1cb45`.
+
+The bounded resume command cannot expand beyond the pinned IDs or retry an
+already attempted ID. It is not authorization for bulk generation:
+
+```powershell
+uv run --env-file .env spotify-cares machine-annotate --queue training --provider groq --selection data/labels/annotation/machine/reviews/classification_v1_selection.json --limit 8
+```
+
+### Actual eight-case result
+
+- All eight responses passed the five-field schema and ended with `stop`; zero
+  API failures, automatic retries, duplicate attempts or unfinished selected IDs.
+- Regression checks: all three still held. Paid entitlement was again assigned
+  account-access/credential reasoning; unclear financial wording was marked clear;
+  payment receipt wording was again rewritten as duplicate charges. The shorter
+  output removed reply-action promises but did not fix these semantic failures.
+- Five new cases, assessed separately: three provisionally eligible (playback
+  failure, disappearing downloads, accidental library removal); two held (an
+  existing sharing-feature regression labelled feature availability, and an
+  ambiguous platform complaint asserted to mean unavailable integration).
+- These findings are AI-assisted inspection, not independent human ratings or
+  measured annotation accuracy. The three provisional labels are not certified
+  correct; in particular, a recovery request does not establish an automatic
+  recovery capability or exclude later human handling.
+- Actual provider usage: 27,486 input + 1,348 completion = **28,834 tokens**.
+  Input reservations ranged from 4,482 to 4,672 tokens; with 1,024 output tokens
+  each, total reservations were 44,441. Each request fits the observed 8,000-TPM
+  limit; two concurrent reservations do not. Resumes respected the rolling window.
+  Reservations were not refunded from observed usage. RPM 5 remains an operator
+  ceiling, not a verified account RPM allowance.
+- Final combined selection: **16 labels (11 Gemini + 5 Groq)**, 30 protected stale
+  human records, 249 unattempted, 5 held, **254 remaining**. The active run has
+  eight schema successes but only three usable selections. Development is still
+  0/80 and was not generated or semantically inspected in this experiment.
+
+The eight-case experiment is finished, not the full queue. Consequently the CLI
+reports `complete: false` and exit code 1 without implying an API/schema failure.
+An actual-data resume using a provider that raises on any invocation made zero
+calls and left response/ledger bytes unchanged. The original ledger prefix and
+all 53 other original non-registry/non-ledger annotation artifacts are unchanged;
+the exclusion registry preserves previous entries and adds five current holds.
+Human labels, older model outputs, splits and frozen policy remain unchanged.
+
+**Stop here:** repeated errors persist. Keep the five uncertain records explicitly
+excluded and request targeted human review. Do not repeat prompt experiments,
+switch models or run bulk annotation without a new authorized step. Detailed
+input/output comparisons and the pinned selection are in ignored local review
+files. The final combined manifest is
+`3de2c4e48978fd743028104d9bf25b0fd4a6d463fef77a7b3128beea4ec8591b`.
+
 ## Approved and frozen locally
 
 Active versions are `spotify-intents-v0.2-proposed` and

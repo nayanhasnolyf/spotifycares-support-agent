@@ -170,6 +170,26 @@ ledger's original prefix is unchanged and exactly five request reservations were
 appended, each more than 60 seconds apart. Frozen hashes still match and all 30
 human labels remain stale. Local review findings are not independent human ratings.
 
+### Stage 4 classification-only experiment (2026-09-15)
+
+Implemented the optional-guidance machine schema while preserving full-schema
+records and explicitly retained Gemini/Groq runs. Pinned three held regression
+IDs and five deterministically selected new training IDs before viewing new
+outputs. Generated exactly eight real responses, with no retries or API/schema
+failures. All three regressions and two new cases remain held; three new labels
+are provisionally eligible, not independently verified human judgments.
+
+Combined selection: 16 machine labels (11 Gemini, 5 Groq); 249 unattempted plus
+5 held = 254 remaining. All 30 human labels remain stale and protected. Frozen
+policy hashes still match; development and golden remain untouched. Actual usage
+was 28,834 tokens. Resume was checked with a failing-on-call provider and made no
+calls or response/ledger mutations. Next: human review of the five held cases,
+not further retries, bulk generation or classifier training. See the latest
+bounded-experiment section in `docs/machine_annotation.md` for evidence and limits.
+
+Verification: all 110 tests passed; compilation, CLI help and staged whitespace
+checks passed. Staged content was scanned for secrets and unintended data files.
+
 ## Stage 5 — Golden-set annotation (freeze satisfied; human work outstanding)
 
 Randomly select and genuinely hand-label a target of 200 examples (allowed range: 150–250). Preserve stable IDs and provenance. Double-label a subset to measure agreement and adjudicate disagreements without producing model predictions for the golden set.

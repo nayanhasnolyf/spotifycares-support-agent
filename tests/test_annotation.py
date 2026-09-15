@@ -125,6 +125,7 @@ def annotation_config(tmp_path: Path) -> AppConfig:
             "groq_prompt_path": Path("configs/machine_annotation_prompt.txt"),
             "groq_prompt_profile": "full",
             "groq_max_completion_tokens": 2048,
+            "machine_decision_schema": "full-v1",
             "machine_rate": base.annotation.machine_rate.model_copy(update={"request_interval_seconds": 0}),
         }
     )

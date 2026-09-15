@@ -65,6 +65,31 @@ class MachineDecision(BaseModel):
         return self
 
 
+class MachineClassification(BaseModel):
+    """Smaller machine-only schema. Missing guidance/flags are not negative labels."""
+    model_config = ConfigDict(extra="forbid")
+    primary_intent: str = Field(min_length=1)
+    should_escalate: Literal["yes", "no"]
+    escalation_reason_code: str | None
+    ambiguity: Literal["clear", "ambiguous"]
+    rationale: str = Field(min_length=1, max_length=600)
+    expected_reply_guidance: str | None = None
+
+    @model_validator(mode="after")
+    def consistent(self):
+        if not self.rationale.strip():
+            raise ValueError("rationale must describe evidence")
+        if (self.should_escalate == "yes") != bool(self.escalation_reason_code):
+            raise ValueError("reason must match escalation decision")
+        if self.should_escalate == "no" and self.escalation_reason_code is not None:
+            raise ValueError("no escalation requires null reason")
+        return self
+
+
+def decision_model(provenance):
+    return MachineClassification if provenance.get("decision_schema") == "classification-v1" else MachineDecision
+
+
 class MachineRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
     annotation_source: Literal["machine_annotated"] = "machine_annotated"
@@ -76,7 +101,7 @@ class MachineRecord(BaseModel):
     timestamp: datetime
     attempt: int = Field(ge=1)
     status: Literal["success", "failure"]
-    decision: MachineDecision | None
+    decision: MachineDecision | MachineClassification | None
     error_code: Literal["provider_error", "invalid_output", "empty_output"] | None
     response_model_version: str | None = None
     provider_http_status: int | None = Field(default=None, ge=100, le=599)
@@ -96,14 +121,14 @@ class MachineRecord(BaseModel):
         return self
 
 
-def validate_decision(decision: MachineDecision, taxonomy) -> None:
+def validate_decision(decision, taxonomy) -> None:
     if decision.primary_intent not in {item.label for item in taxonomy.intents}:
         raise ValueError("unknown intent")
     if decision.escalation_reason_code is not None and decision.escalation_reason_code not in {
         item.code for item in taxonomy.escalation_policy.reason_codes
     }:
         raise ValueError("unknown reason")
-    if set(decision.risk_flags) - set(taxonomy.risk_flags):
+    if set(getattr(decision, "risk_flags", [])) - set(taxonomy.risk_flags):
         raise ValueError("unknown risk flag")
 
 
@@ -137,7 +162,9 @@ def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_pa
     provider_name = provider_name or config.annotation.machine_provider
     if provider_name not in {"gemini", "groq"} or (legacy_gemini and provider_name != "gemini"):
         raise AnnotationError("invalid provider/legacy selection")
-    prompt_path = prompt_path or (config.annotation.groq_prompt_path if provider_name == "groq" else PROMPT_PATH)
+    simple = config.annotation.machine_decision_schema == "classification-v1" and not legacy_gemini
+    default_prompt = (Path("configs/machine_annotation_prompt_v3.txt") if simple else PROMPT_PATH)
+    prompt_path = prompt_path or (config.annotation.groq_prompt_path if provider_name == "groq" else default_prompt)
     model = model if model is not None else (
         config.annotation.groq_model if provider_name == "groq" else config.annotation.machine_model
     )
@@ -155,9 +182,13 @@ def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_pa
     pool_hash = sha256_file(pool_path)
     if set(queue.candidate_pool_sha256) != {pool_hash}:
         raise AnnotationError("input pool differs from queue provenance")
-    schema = MachineDecision.model_json_schema()
+    schema = (MachineClassification if simple else MachineDecision).model_json_schema()
+    if simple:
+        # Guidance is optional in storage but is never requested from the model.
+        schema["properties"].pop("expected_reply_guidance")
     schema["properties"]["primary_intent"]["enum"] = [item.label for item in taxonomy.intents]
-    schema["properties"]["risk_flags"]["items"]["enum"] = taxonomy.risk_flags
+    if not simple:
+        schema["properties"]["risk_flags"]["items"]["enum"] = taxonomy.risk_flags
     schema["properties"]["escalation_reason_code"]["anyOf"][0]["enum"] = [
         item.code for item in taxonomy.escalation_policy.reason_codes
     ]
@@ -187,6 +218,8 @@ def prepare_run(config: AppConfig, queue_name: str, model: str | None, prompt_pa
                               transport="groq-chat-completions-json-schema-strict-v1")
             if compact:
                 provenance.update(prompt_version="spotify-machine-v2", policy_renderer="compact-v1")
+        if simple:
+            provenance.update(decision_schema="classification-v1", prompt_version="spotify-machine-v3-classification")
     run_hash = digest(provenance)
     path = config.annotation.output_dir / "machine" / queue_name / f"{run_hash}.jsonl"
     return queue, pool_path, taxonomy, system, schema, provenance, path
@@ -224,8 +257,12 @@ def retained_labels(config, queue_name, prompt_path=None):
         if source.run_sha256 in seen:
             raise AnnotationError("duplicate retained run")
         seen.add(source.run_sha256)
+        source_config = config.model_copy(update={"annotation": config.annotation.model_copy(update={
+            "groq_prompt_profile": source.groq_prompt_profile,
+            "groq_max_completion_tokens": source.groq_max_completion_tokens,
+            "machine_decision_schema": source.decision_schema})})
         queue, pool, taxonomy, _, _, provenance, path = prepare_run(
-            config, queue_name, source.model, source.prompt_path, source.provider, source.legacy_gemini)
+            source_config, queue_name, source.model, source.prompt_path, source.provider, source.legacy_gemini)
         if digest(provenance) != source.run_sha256:
             raise AnnotationError("retained run does not match current policy/prompt/schema/environment")
         if not path.exists():
@@ -268,6 +305,8 @@ def validate_events(events, provenance, members, taxonomy):
         if record.example_id in latest and latest[record.example_id].status == "success":
             raise AnnotationError("duplicate machine success or attempt after success")
         if record.decision is not None:
+            if not isinstance(record.decision, decision_model(provenance)):
+                raise AnnotationError("stored decision schema does not match run provenance")
             try:
                 validate_decision(record.decision, taxonomy)
             except ValueError:
@@ -341,6 +380,17 @@ def excluded_records(config, queue_name):
                 "run_sha256": run_hash, "attempt": event.attempt,
                 "source_file_sha256": sha256_file(path), "reason": reason,
                 "status": "excluded; replacement does not erase original judgment"})
+    for item in record_exclusions(config, queue_name):
+        path = config.annotation.output_dir / "machine" / queue_name / f"{item['run_sha256']}.jsonl"
+        for event in load_events(path):
+            if event.example_id != item["example_id"]:
+                continue
+            if event.queue_name != queue_name or digest(event.provenance) != item["run_sha256"]:
+                raise AnnotationError("excluded record provenance mismatch")
+            result.setdefault(event.example_id, []).append({
+                "run_sha256": event.run_sha256, "attempt": event.attempt,
+                "source_file_sha256": sha256_file(path), "reason": item["reason"],
+                "status": "held original preserved; regression retest, not independent evaluation"})
     return result
 
 
@@ -395,6 +445,8 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=None, limit=
                 raise AnnotationError("invalid pinned machine selection")
             selection_hash = sha256_file(selection_path)
             pending = [eid for eid in ids if eid in pending]
+            if selection.get("one_attempt_per_example") is True:
+                pending = [eid for eid in pending if eid not in latest]
         for eid, previous in safety_latest.items():
             if eid not in missing or previous.status != "failure":
                 continue
@@ -482,7 +534,9 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=None, limit=
                         error = "empty_output"
                     else:
                         try:
-                            decision = MachineDecision.model_validate_json(raw)
+                            decision = decision_model(provenance).model_validate_json(raw)
+                            if isinstance(decision, MachineClassification) and decision.expected_reply_guidance is not None:
+                                raise ValueError("classification-only generation must not produce reply guidance")
                             validate_decision(decision, taxonomy)
                         except (ValueError, ValidationError):
                             decision, error = None, "invalid_output"
@@ -515,7 +569,7 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=None, limit=
                 _append_jsonl(path, record.model_dump(mode="json"))
                 latest[eid] = record
                 if error == "provider_error":
-                    if (http_status == 429 or http_status in {500, 502, 503, 504}) and rate_evidence and rate_evidence.category == "temporary" and retries.get(eid, 0) < rate.max_retries:
+                    if (http_status == 429 or http_status in {500, 502, 503, 504}) and rate_evidence and rate_evidence.category == "temporary" and retries.get(eid, 0) < rate.max_retries and not (selection_path and selection.get("one_attempt_per_example")):
                         retries[eid] = retries.get(eid, 0) + 1
                         work.appendleft(eid)
                         continue

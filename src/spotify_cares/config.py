@@ -84,6 +84,9 @@ class RetainedMachineRun(StrictModel):
     run_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     legacy_gemini: bool = False
     prompt_path: Path = Path("configs/machine_annotation_prompt.txt")
+    groq_prompt_profile: Literal["full", "compact-v1"] = "full"
+    groq_max_completion_tokens: int = Field(default=2048, ge=512, le=4096)
+    decision_schema: Literal["full-v1", "classification-v1"] = "full-v1"
 
 
 class GroqRateSettings(StrictModel):
@@ -112,6 +115,7 @@ class AnnotationSettings(StrictModel):
     groq_prompt_path: Path = Path("configs/machine_annotation_prompt.txt")
     groq_prompt_profile: Literal["full", "compact-v1"] = "full"
     groq_max_completion_tokens: int = Field(default=2048, ge=512, le=4096)
+    machine_decision_schema: Literal["full-v1", "classification-v1"] = "full-v1"
     excluded_machine_runs: dict[str, str] = Field(default_factory=dict)
     machine_record_exclusions_path: Path | None = None
     groq_rate: GroqRateSettings = Field(default_factory=GroqRateSettings)
