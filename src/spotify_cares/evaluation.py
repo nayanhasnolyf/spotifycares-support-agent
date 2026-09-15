@@ -5,6 +5,8 @@ when genuine labels are provided. Golden evaluation is protected by default.
 """
 
 import json
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -87,6 +89,9 @@ def _load_labels(config, queue_name, split_dir, must_have_labels=False):
     records = []
     for r in inputs.to_dict("records"):
         label = labels.get(r["example_id"])
+        if must_have_labels and not label:
+            continue
+            
         record = {
             "example_id": r["example_id"],
             "customer_text": r["customer_text_redacted"],
@@ -96,6 +101,16 @@ def _load_labels(config, queue_name, split_dir, must_have_labels=False):
             "human_escalation_reason": label.get("escalation_reason_code") if label else None,
         }
         records.append(record)
+        
+    if must_have_labels:
+        if len(records) != 150:
+            raise AnnotationError(f"expected exactly 150 golden records, found {len(records)}")
+        annotators = {labels.get(r["example_id"], {}).get("annotator_id") for r in records}
+        if "gemini" in annotators or "groq" in annotators:
+            raise AnnotationError("machine-generated labels detected in golden set")
+        if len(set(r["example_id"] for r in records)) != len(records):
+            raise AnnotationError("duplicate golden IDs detected")
+            
     return records
 
 
@@ -116,22 +131,23 @@ def cached_evaluation(system: EvaluationSystem, system_name: str, records: list[
     
     for r in records:
         eid = r["example_id"]
-        if eid in predictions and not live:
+        if eid in predictions:
             pred = predictions[eid]
         elif live:
+            start_time = time.time()
             pred = system.predict(r["customer_text"], r["context_texts"])
             pred["example_id"] = eid
-            new_predictions.append(pred)
+            pred["runtime_seconds"] = time.time() - start_time
+            pred["timestamp"] = datetime.now(timezone.utc).isoformat()
+            
+            with run_lock(cache_dir / "predictions.lock"):
+                with cache_path.open("a", encoding="utf-8") as f:
+                    f.write(canonical(pred) + "\n")
+                    
         else:
             raise AnnotationError(f"cache miss for {eid} and --live not specified")
         
         results.append({"example_id": eid, "prediction": pred, "ground_truth": r})
-        
-    if new_predictions:
-        with run_lock(cache_dir / "predictions.lock"):
-            with cache_path.open("a", encoding="utf-8") as f:
-                for p in new_predictions:
-                    f.write(canonical(p) + "\n")
                     
     return results
 
@@ -179,19 +195,41 @@ def compute_metrics(results: list[dict], system_name: str):
     }
     
     # Escalation safety metrics
-    # True escalation = human said escalate, system escalated
-    # False auto-handle = human said escalate, system auto-handled (critical failure)
+    # Escalation safety metrics
     escalation_cases = [r for r in results if r["ground_truth"]["human_escalate"] is True]
-    if escalation_cases:
-        caught = sum(1 for r in escalation_cases if r["prediction"].get("decision") == "proposed_escalate")
-        report["escalation"] = {
-            "human_escalation_cases": len(escalation_cases),
-            "successfully_escalated": caught,
-            "false_auto_handle_rate": (len(escalation_cases) - caught) / len(escalation_cases),
-            "safety_recall": caught / len(escalation_cases)
-        }
-    else:
-        report["escalation"] = {"status": "no_escalation_cases_in_labels"}
+    auto_handle_cases = [r for r in results if r["ground_truth"]["human_escalate"] is False]
+    
+    proposed_escalate = [r for r in results if r["prediction"].get("decision") == "proposed_escalate"]
+    proposed_auto_handle = [r for r in results if r["prediction"].get("decision") == "proposed_auto_handle"]
+    
+    true_escalations = [r for r in escalation_cases if r["prediction"].get("decision") == "proposed_escalate"]
+    false_auto_handles = [r for r in escalation_cases if r["prediction"].get("decision") == "proposed_auto_handle"]
+    true_auto_handles = [r for r in auto_handle_cases if r["prediction"].get("decision") == "proposed_auto_handle"]
+    
+    report["escalation"] = {
+        "human_escalation_cases": len(escalation_cases),
+        "human_auto_handle_cases": len(auto_handle_cases),
+        "proposed_escalate": len(proposed_escalate),
+        "proposed_auto_handle": len(proposed_auto_handle),
+        
+        "successfully_escalated": len(true_escalations),
+        "unsafe_auto_handles": len(false_auto_handles),
+        "successful_auto_handles": len(true_auto_handles),
+        
+        "escalation_precision": len(true_escalations) / len(proposed_escalate) if proposed_escalate else 0.0,
+        "escalation_recall": len(true_escalations) / len(escalation_cases) if escalation_cases else 0.0,
+        "auto_handling_coverage": len(proposed_auto_handle) / len(results) if results else 0.0,
+        "unsafe_auto_handle_rate": len(false_auto_handles) / len(proposed_auto_handle) if proposed_auto_handle else 0.0,
+        "missed_escalation_rate": len(false_auto_handles) / len(escalation_cases) if escalation_cases else 0.0,
+    }
+    
+    failed_intent = [r.get("example_id") for r in results if r["ground_truth"]["human_intent"] and r["prediction"].get("intent") != r["ground_truth"]["human_intent"]]
+    failed_escalation = [r.get("example_id") for r in false_auto_handles]
+    
+    report["failures"] = {
+        "intent_errors": failed_intent,
+        "unsafe_auto_handles": failed_escalation,
+    }
         
     return report
 
@@ -203,7 +241,7 @@ def run_evaluation(config, baseline_settings, agent_settings, queue_name: str, s
     cache_dir = config.artifacts.directory / "evaluation"
     cache_dir.mkdir(parents=True, exist_ok=True)
     
-    records = _load_labels(config, queue_name, config.annotation.split_dir, must_have_labels=False)
+    records = _load_labels(config, queue_name, config.annotation.split_dir, must_have_labels=queue_name=="golden")
     if not records:
         raise AnnotationError(f"no examples found for queue {queue_name}")
         

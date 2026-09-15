@@ -43,7 +43,8 @@ def test_compute_metrics_with_labels():
     assert report["metrics_status"] == "computed"
     assert report["intent"]["accuracy"] == 0.5
     assert report["escalation"]["human_escalation_cases"] == 2
-    assert report["escalation"]["false_auto_handle_rate"] == 0.5
+    assert report["escalation"]["missed_escalation_rate"] == 0.5
+    assert report["escalation"]["unsafe_auto_handle_rate"] == 1.0
     assert report["escalation"]["successfully_escalated"] == 1
 
 

@@ -62,8 +62,6 @@ class SemanticRetriever:
         self.settings = settings
         if encoder is None:
             from sentence_transformers import SentenceTransformer
-            import torch
-            torch.set_num_threads(min(4, os.cpu_count() or 1))
             self.encoder = SentenceTransformer(MODEL, revision=settings.embedding_revision,
                 cache_folder=str(settings.model_cache), local_files_only=True, trust_remote_code=False, device="cpu")
         else:
@@ -151,7 +149,7 @@ def direct_signals(message, context=()):
         if incident and not historical:
             security = True
     resolved = bool(re.search(r"resolved|restored|recovered|all fixed|no further|no more", message, re.I))
-    if not security and not resolved and len(message.split()) < 12 and context:
+    if not security and not resolved and len(message.split()) < 12 and len(context) > 0:
         security = direct_signals(" ".join(context)).current_security_incident
     payment = bool(re.search(r"charged (?:twice|three times)|duplicate charge|unknown charge|refund (?:me|my)|(?:want|request|need).{0,12}refund", message,re.I))
     if re.search(r"not charged|no duplicate|don't want.{0,12}refund",message,re.I):
