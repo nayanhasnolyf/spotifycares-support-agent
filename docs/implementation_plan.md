@@ -1,6 +1,6 @@
 # Implementation plan
 
-This plan separates exploratory work, model development, frozen evaluation, and reporting. Stages 1 through 3 are complete. Stage 4 tooling and queues are ready, while its required human review and pilot remain open. Later stages may change as the real data reveals constraints; any meaningful change will be recorded in the decision log.
+This plan separates exploratory work, model development, frozen evaluation, and reporting. Stages 1 through 3 are complete and the Stage 4 policy is frozen. The owner ended annotation tuning and authorized baseline implementation with the existing eligible subset. Five held cases and 30 stale human labels stay excluded without another review prerequisite. Stage 6 baseline code now runs; independent evaluation remains outstanding. Earlier checkpoints below are historical, not current blockers.
 
 ## Guardrails used throughout
 
@@ -197,6 +197,32 @@ Randomly select and genuinely hand-label a target of 200 examples (allowed range
 Exit criteria: CSV has the required human fields, validation passes, the example count is in range, and the frozen split fingerprint is recorded.
 
 ## Stage 6 — Baselines and retrieval
+
+Current baseline checkpoint: implemented majority-intent/fixed-acknowledgement/
+always-escalate and separate TF-IDF + Logistic Regression intent classification.
+The verified manifest selects 16 machine labels across three classes (13 billing,
+2 library, 1 playback); six classes are absent. Vocabulary and classifier fit only
+these inputs/preceding contexts. No training accuracy or development/golden score
+was computed. The independent TF-IDF historical retrieval index uses 27,455
+training-only examples, checked by fingerprints and ID/thread/group membership.
+Reply output is an allowlisted safe projection; frozen-policy routing has an
+explicit structured interface and a limited heuristic demo adapter. CLI inspection
+and both real-data demos run; successful execution is not model-quality evidence.
+
+The annotation loop is closed: do not request another held-case review or retry
+annotation as a prerequisite. Preserve existing labels and frozen artifacts.
+Groq GPT-OSS 120B is documented as one future coverage option; authenticated
+listing succeeded but no generation/schema/account-limit experiment was run.
+See `docs/baselines.md` for commands, limitations and remaining human evaluation
+requirements. Retrieval, drafting interfaces and evaluation-harness implementation
+do not depend on annotation completeness. Dense retrieval and the proposed agent
+below remain unfinished; this checkpoint implements only the requested baselines.
+
+Verification: 130 tests passed (20 baseline-specific synthetic tests), both actual
+CLI demonstrations and help succeeded, compilation/whitespace/secret checks
+passed. All 67 pre-existing annotation artifacts are byte-for-byte unchanged.
+The current real classifier fits 505 features across three classes; this is an
+implementation count, not a quality score. No development/golden evaluation ran.
 
 Implement a trivial baseline, a simple scikit-learn baseline, and the proposed intent classifier. Embed historical training conversations with `all-MiniLM-L6-v2`; retrieve with NumPy cosine similarity. Fit and tune using training/development data only.
 

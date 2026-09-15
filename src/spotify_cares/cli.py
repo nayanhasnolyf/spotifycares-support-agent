@@ -133,12 +133,44 @@ def build_parser() -> argparse.ArgumentParser:
             machine_parser.add_argument("--limit", type=int, help="maximum attempts this invocation; rerun to resume")
             machine_parser.add_argument("--retry-unknown-quota", action="store_true",
                                         help="explicitly retry a saved ambiguous 429 after checking quota; no automatic unknown-limit retries")
+    for name in ("baseline-demo", "baseline-inspect"):
+        baseline_parser = commands.add_parser(name, help="training-only baselines; no evaluation")
+        baseline_parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+        baseline_parser.add_argument("--settings", type=Path, default=Path("configs/baselines.yaml"))
+        if name == "baseline-demo":
+            baseline_parser.add_argument("--message", required=True)
+            baseline_parser.add_argument("--context", action="append", default=[])
+            baseline_parser.add_argument("--baseline", choices=("trivial", "tfidf"), default="tfidf")
+            baseline_parser.add_argument("--output", type=Path, help="new local JSONL file under artifacts; never overwrite")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command in ("baseline-demo", "baseline-inspect"):
+        import json
+        from spotify_cares.annotation import AnnotationError
+        from spotify_cares.config import load_config
+        from spotify_cares.baselines import load_settings, load_training, run_demo
+        try:
+            config, settings = load_config(args.config), load_settings(args.settings)
+            if args.command == "baseline-inspect":
+                result = load_training(config, settings)[3]
+            else:
+                if args.output and not args.output.resolve().is_relative_to(config.artifacts.directory.resolve()):
+                    raise AnnotationError("demo output must stay under ignored artifacts directory")
+                result = run_demo(config, settings, args.message, args.baseline, args.context)
+                if args.output:
+                    args.output.parent.mkdir(parents=True, exist_ok=True)
+                    with args.output.open("x", encoding="utf-8") as handle:
+                        handle.write(json.dumps(result, ensure_ascii=False) + "\n")
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        except (AnnotationError, ValueError, OSError) as error:
+            print(f"blocked: {error}")
+            return 2
 
     if args.command == "check-groq":
         import json

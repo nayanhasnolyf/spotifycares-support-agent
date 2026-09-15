@@ -1,5 +1,12 @@
 # Policy approval and machine annotation
 
+**Current direction (supersedes earlier next-action suggestions):** the owner ended
+annotation tuning and declined another manual review round. Preserve all five held
+cases as excluded. Baselines now use the existing 16 eligible machine labels;
+annotation completeness is not a prerequisite for retrieval, drafting interfaces
+or evaluation-harness implementation. See `baselines.md`. No further annotation
+experiment or review is authorized by the historical commands below.
+
 ## Classification-only bounded experiment
 
 The owner authorized one experiment containing three previously held training

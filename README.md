@@ -2,7 +2,34 @@
 
 This repository is the staged implementation of a Hiver SDE Intern take-home assignment. It will use real SpotifyCares conversations from Kaggle's `thoughtvector/customer-support-on-twitter` dataset to classify support intents, retrieve relevant historical conversations, draft grounded replies, and decide whether each case can be auto-handled or needs a human.
 
-Stages 1 through 3 are complete. The approved v0.2 policy is frozen locally; all 30 partly AI-assisted human labels remain prior-version and stale. The classification-only eight-case Groq experiment completed without API/schema failures, but all three regression cases and two of five new cases remain held for policy conflicts or unsupported certainty. The combined training manifest selects 11 Gemini + 5 Groq labels: 249 examples are unattempted and 5 held, leaving 254 without usable machine labels. Development remains 0/80. These are machine labels, not independent human accuracy. Golden remains untouched; no bulk generation, classifier training or evaluation has run. Next: targeted human review of the five held cases, not more retries. See [the bounded experiment](docs/machine_annotation.md#classification-only-bounded-experiment). Source-derived text stays ignored.
+Stages 1 through 3 are complete. Annotation tuning has ended: five held cases and 30 stale human records remain excluded and unchanged, with no further review prerequisite. Training-only baselines now run using 16 eligible machine labels: billing/payment 13, library/playlists 2, playback/audio 1. The other six intents are absent. A separate TF-IDF retrieval index covers 27,455 training conversations without requiring labels for all of them. The v0.2 policy remains frozen; development and golden are untouched. No accuracy or reply-quality scores have been computed. See [baseline methods, provenance and limitations](docs/baselines.md).
+
+## Working baseline demo
+
+```powershell
+uv run spotify-cares baseline-inspect
+uv run spotify-cares baseline-demo --baseline trivial --message "Music stops when I try to listen. What can I try?"
+uv run spotify-cares baseline-demo --baseline tfidf --message "Music stops when I try to listen. What can I try?"
+```
+
+These commands need the existing ignored local training artifacts, but no API key.
+The message is illustrative, not an evaluation example. The demo emits intent,
+draft, routing decision/reasons, evidence IDs, and training provenance. Both
+baselines predicted billing/payment on this illustrative input; this is reported
+execution behavior, not model quality. The trivial baseline always escalates.
+The TF-IDF baseline uses independent policy signals and sanitized historical
+reply projections or safe clarification. Its heuristic routing is incomplete;
+this is not a deployable support agent.
+
+Classifier vocabulary and Logistic Regression fit only the 16 selected training
+inputs/preceding contexts. Retrieval has its own training-only vocabulary.
+All labels are machine-generated (11 Gemini, 5 Groq), heavily imbalanced and
+missing six classes. Human development/golden labels, reply ratings, judge
+validation, system freeze and measured evaluation remain outstanding. Annotation
+completeness does not block implementing those interfaces or the evaluation code.
+Optional JSONL output must stay under ignored `artifacts/` and cannot overwrite
+existing files. A documented future coverage option is Groq GPT-OSS 120B; only
+account model listing was checked, and no new annotation experiment was started.
 
 The saved 429 lacks quota and retry details, so its limit type/reset time is unknown.
 The runner now captures safe quota evidence and supports paced, bounded temporary
