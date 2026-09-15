@@ -41,11 +41,12 @@ class TFIDFSystem:
         self.settings = settings
 
     def predict(self, message: str, context: list[str]) -> dict[str, Any]:
-        from spotify_cares.baselines import detect_signals, draft_reply, feature_text
-        intent = self.classifier.predict(feature_text(message, context), "tfidf") if self.classifier.model else None
-        evidence = self.retriever.search(message)
-        draft = draft_reply(evidence)
-        route = route_policy(detect_signals(message, context))
+        from spotify_cares.baselines import detect_signals, draft_reply, feature_text, route_policy
+        text = feature_text(message, context)
+        intent = self.classifier.predict(text, "tfidf") if self.classifier.model else None
+        evidence = self.retriever.search(text)
+        route = route_policy(detect_signals(text))
+        draft = draft_reply(route, evidence)
         reasons = [route["reason_code"]] if route["reason_code"] else []
         if not evidence:
             reasons.append("insufficient_retrieval_or_generation_evidence")
@@ -54,10 +55,10 @@ class TFIDFSystem:
             
         return {
             "intent": intent,
-            "draft": draft["draft"],
+            "draft": draft,
             "decision": "proposed_escalate" if reasons else "proposed_auto_handle",
             "reason_codes": reasons,
-            "evidence_ids": draft["evidence_ids"],
+            "evidence_ids": [i for e in evidence for i in e.get("evidence_ids", [])],
         }
 
 
