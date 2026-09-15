@@ -245,3 +245,8 @@ Exit criteria: one command reproduces saved JSONL predictions, metrics, plots, a
 Write the evidence-backed README report: framing, results, baseline comparison, five observed failure modes, “What is misleading about my headline number?”, and next steps. Optionally add a thin Streamlit demo that calls the same package APIs.
 
 Exit criteria: every reported number traces to a generated artifact, instructions work from a clean checkout, and no secrets or raw personal data are tracked.
+
+## Status Update (2026-09-15)
+
+- **Stage 7 (Reply drafting and routing)**: Completed via the final `Agent` implementation featuring the `SemanticRetriever`, Pydantic strict response validation, fallback tracking, deterministic policy routing, and `agent-demo` CLI endpoint.
+- **Stage 8 (Automated evaluation)**: Completed via the offline-first `evaluation` harness. It compares Trivial, TF-IDF, and Agent systems across intent and safety metrics, enforces API replay caching, and protects the golden queue.

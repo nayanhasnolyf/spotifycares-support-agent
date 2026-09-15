@@ -149,6 +149,17 @@ def build_parser() -> argparse.ArgumentParser:
     agent_parser.add_argument("--message", required=True)
     agent_parser.add_argument("--context", action="append", default=[])
     agent_parser.add_argument("--output", type=Path, help="new ignored artifacts JSONL; no overwrite")
+    
+    evaluate_parser = commands.add_parser("evaluate", help="evaluate systems against human labels")
+    evaluate_parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    evaluate_parser.add_argument("--baselines", type=Path, default=Path("configs/baselines.yaml"))
+    evaluate_parser.add_argument("--settings", type=Path, default=Path("configs/agent.yaml"))
+    evaluate_parser.add_argument("--systems", type=str, default="trivial,tfidf,agent", help="comma-separated systems to evaluate")
+    evaluate_parser.add_argument("--queue", choices=("development", "golden"), default="development")
+    evaluate_parser.add_argument("--live", action="store_true", help="allow live inference/API calls on cache miss")
+    evaluate_parser.add_argument("--golden-confirmed", action="store_true", help="explicitly unlock golden queue evaluation")
+    evaluate_parser.add_argument("--output", type=Path, default=Path("artifacts/evaluation/report.json"), help="report output path")
+    
     return parser
 
 
@@ -175,6 +186,29 @@ def main(argv: Sequence[str] | None = None) -> int:
                     handle.write(json.dumps(result,ensure_ascii=False)+"\n")
             print(json.dumps(result,indent=2,ensure_ascii=False))
             return 1 if result["fallback"] else 0
+        except (AnnotationError, ValueError, OSError) as error:
+            print(f"blocked: {error}")
+            return 2
+
+    if args.command == "evaluate":
+        import json
+        from spotify_cares.annotation import AnnotationError
+        from spotify_cares.config import load_config
+        from spotify_cares.baselines import load_settings
+        from spotify_cares.agent import load_agent_settings
+        from spotify_cares.evaluation import run_evaluation
+        try:
+            config = load_config(args.config)
+            systems = [s.strip() for s in args.systems.split(",") if s.strip()]
+            report = run_evaluation(
+                config, load_settings(args.baselines), load_agent_settings(args.settings),
+                args.queue, systems, args.live, args.golden_confirmed
+            )
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            with args.output.open("w", encoding="utf-8") as handle:
+                handle.write(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+            return 0
         except (AnnotationError, ValueError, OSError) as error:
             print(f"blocked: {error}")
             return 2

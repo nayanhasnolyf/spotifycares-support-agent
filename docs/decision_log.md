@@ -106,3 +106,9 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-09
 - **Decision:** Base each example interval on all context, customer, and reply timestamps; quarantine an entire combined group if it spans a cutoff or has an unusable timestamp.
 - **Rationale:** Splitting a duplicate-connected group would leak related language, while assigning a spanning group to training could place replies after held-out periods begin. Quarantine preserves both group integrity and honest chronology even when pool ratios move away from 70/15/15.
+
+## D016 — Offline evaluation caching and golden protection
+
+- **Date:** 2026-09-15
+- **Decision:** The evaluation harness defaults to offline cache replays. New API calls require an explicit `--live` flag, and evaluating the golden queue requires `--golden-confirmed`.
+- **Rationale:** This ensures deterministic regression testing, prevents accidental API quota burn, and guarantees that golden set examples are not unblinded or altered unexpectedly.
