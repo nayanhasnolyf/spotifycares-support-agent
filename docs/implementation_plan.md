@@ -250,3 +250,4 @@ Exit criteria: every reported number traces to a generated artifact, instruction
 
 - **Stage 7 (Reply drafting and routing)**: Completed via the final `Agent` implementation featuring the `SemanticRetriever`, Pydantic strict response validation, fallback tracking, deterministic policy routing, and `agent-demo` CLI endpoint.
 - **Stage 8 (Automated evaluation)**: Completed via the offline-first `evaluation` harness. It compares Trivial, TF-IDF, and Agent systems across intent and safety metrics, enforces API replay caching, and protects the golden queue.
+- **Stage 9 (Final report and optional demo)**: Completed via the Streamlit demo `app/agent_app.py` and the updated `README.md`. As required by the rule *"Never invent data, annotations, API outputs, human ratings, or measured results"*, the evaluation metrics in the README are marked as blocked pending live execution on human-annotated data.
