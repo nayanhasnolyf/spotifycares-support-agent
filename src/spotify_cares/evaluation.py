@@ -124,7 +124,8 @@ def cached_evaluation(system: EvaluationSystem, system_name: str, records: list[
             for line in f:
                 if line.strip():
                     p = json.loads(line)
-                    predictions[p["example_id"]] = p
+                    if p.get("generation", {}).get("error") != "provider_unavailable":
+                        predictions[p["example_id"]] = p
                     
     results = []
     new_predictions = []
@@ -140,9 +141,10 @@ def cached_evaluation(system: EvaluationSystem, system_name: str, records: list[
             pred["runtime_seconds"] = time.time() - start_time
             pred["timestamp"] = datetime.now(timezone.utc).isoformat()
             
-            with run_lock(cache_dir / "predictions.lock"):
-                with cache_path.open("a", encoding="utf-8") as f:
-                    f.write(canonical(pred) + "\n")
+            if pred.get("generation", {}).get("error") != "provider_unavailable":
+                with run_lock(cache_dir / "predictions.lock"):
+                    with cache_path.open("a", encoding="utf-8") as f:
+                        f.write(canonical(pred) + "\n")
                     
         else:
             raise AnnotationError(f"cache miss for {eid} and --live not specified")

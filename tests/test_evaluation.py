@@ -21,7 +21,8 @@ class DummySystem:
             "draft": "ACK",
             "decision": "proposed_auto_handle",
             "reason_codes": [],
-            "fallback": False
+            "fallback": False,
+            "generation": {}
         }
 
 
@@ -66,6 +67,30 @@ def test_cached_evaluation(tmp_path):
     records.append({"example_id": "2", "customer_text": "hello 2", "context_texts": [], "human_intent": None})
     with pytest.raises(AnnotationError, match="cache miss"):
         cached_evaluation(sys, "dummy", records, cache_dir, live=False)
+
+def test_cached_evaluation_ignores_provider_errors(tmp_path):
+    sys = DummySystem()
+    cache_dir = tmp_path / "cache"
+    records = [{"example_id": "1", "customer_text": "hello", "context_texts": [], "human_intent": None}]
+    
+    # Write a bad prediction to cache
+    cache_dir.mkdir(parents=True)
+    bad_pred = {
+        "example_id": "1",
+        "intent": "other_or_unclear",
+        "fallback": True,
+        "generation": {"error": "provider_unavailable"}
+    }
+    with (cache_dir / "dummy_predictions.jsonl").open("w") as f:
+        f.write(json.dumps(bad_pred) + "\n")
+        
+    # Run cached without live, should raise cache miss because the bad cache is ignored
+    with pytest.raises(AnnotationError, match="cache miss"):
+        cached_evaluation(sys, "dummy", records, cache_dir, live=False)
+        
+    # Run live, should overwrite/append a valid prediction
+    results = cached_evaluation(sys, "dummy", records, cache_dir, live=True)
+    assert results[0]["prediction"]["generation"] == {}
 
 
 def test_run_evaluation_golden_protection(annotation_config, tmp_path):
