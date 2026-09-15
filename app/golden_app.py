@@ -13,6 +13,7 @@ from spotify_cares.annotation import (
     load_queue,
     load_taxonomy,
     save_initial_judgment,
+    save_expected_guidance,
     skip_example,
 )
 from spotify_cares.config import load_config
@@ -27,7 +28,7 @@ def _index(options: list[str], value: str | None) -> int | None:
 
 st.set_page_config(page_title="SpotifyCares Golden Annotation", layout="wide")
 st.title("SpotifyCares Golden Queue Annotation")
-st.caption("Local tool. Fields are minimized for speed. No model predictions or scores are exposed.")
+st.caption("Local tool. Fields are minimized for speed. Keyboard-friendly Save & Next (Press Enter inside form). No model predictions or scores are exposed.")
 
 config = load_config(CONFIG_PATH)
 taxonomy = load_taxonomy(config.annotation.taxonomy_path)
@@ -71,7 +72,7 @@ if controls[1].button("Next", disabled=st.session_state[state_key] >= len(queue)
 if controls[2].button("Resume first incomplete"):
     for index, row in queue.iterrows():
         record = records.get(str(row["example_id"]))
-        if record is None or record.status != "judgment_saved":
+        if record is None or record.status not in ("complete", "judgment_saved"):
             st.session_state[state_key] = int(index)
             break
     st.rerun()
@@ -102,50 +103,93 @@ with left:
 with right:
     st.markdown("#### Judgment")
     intent_options = [item.label for item in taxonomy.intents]
-    reason_options = [item.code for item in taxonomy.escalation_policy.reason_codes]
+    reason_options = ["None"] + [item.code for item in taxonomy.escalation_policy.reason_codes]
     
     with st.form(f"judgment_{example_id}"):
         primary_intent = st.selectbox(
-            "Primary intent",
+            "Primary intent (required)",
             intent_options,
             index=_index(intent_options, existing.primary_intent if existing else None),
         )
         should_escalate = st.radio(
-            "Escalate to human?",
+            "Escalate to human? (required)",
             ["yes", "no"],
             index=_index(["yes", "no"], existing.should_escalate if existing else None),
             horizontal=True,
         )
+        
+        # Determine existing reason for index mapping safely
+        default_reason = existing.escalation_reason_code if existing and existing.escalation_reason_code else "None"
         escalation_reason = st.selectbox(
-            "Reason (if yes)",
+            "Reason (required if Escalate is yes)",
             reason_options,
-            index=_index(reason_options, existing.escalation_reason_code if existing else None),
+            index=_index(reason_options, default_reason) or 0,
         )
         
-        save_judgment = st.form_submit_button("Save & Next")
+        ambiguity = st.radio(
+            "Ambiguity",
+            ["clear", "ambiguous"],
+            index=_index(["clear", "ambiguous"], existing.ambiguity if existing else None),
+            horizontal=True,
+        )
+        
+        notes = st.text_input(
+            "Notes (optional unless ambiguous)",
+            value=existing.annotation_notes if existing else "",
+        )
+        
+        expected_guidance = st.text_input(
+            "Expected Reply Guidance (optional)",
+            value=existing.expected_reply_guidance if existing else "",
+        )
+        
+        save_judgment = st.form_submit_button("Save & Next", type="primary")
         
     if save_judgment:
-        try:
-            # Preserve full provenance fields required by schema but hidden from UI for speed
-            save_initial_judgment(
-                config,
-                queue_name=queue_name,
-                example_id=example_id,
-                primary_intent=primary_intent,
-                should_escalate=should_escalate,
-                escalation_reason_code=escalation_reason,
-                escalation_explanation="golden set annotation",
-                risk_flags=(),
-                ambiguity="clear",
-                annotation_notes="golden set annotation",
-                annotator_id=annotator_id,
-            )
-            st.success("Saved.")
-            if st.session_state[state_key] < len(queue) - 1:
-                st.session_state[state_key] += 1
-            st.rerun()
-        except (AnnotationError, ValueError) as error:
-            st.error(str(error))
+        has_error = False
+        
+        if should_escalate == "yes" and escalation_reason == "None":
+            st.error("Escalation reason is required when should_escalate is 'yes'.")
+            has_error = True
+            
+        if ambiguity == "ambiguous" and not notes.strip():
+            st.error("Notes are required when ambiguity is 'ambiguous'.")
+            has_error = True
+            
+        if not has_error:
+            try:
+                # Clean up escalation reason if 'no' is selected
+                final_reason = escalation_reason if should_escalate == "yes" else None
+                
+                save_initial_judgment(
+                    config,
+                    queue_name=queue_name,
+                    example_id=example_id,
+                    primary_intent=primary_intent,
+                    should_escalate=should_escalate,
+                    escalation_reason_code=final_reason,
+                    escalation_explanation="golden set annotation" if final_reason else None,
+                    risk_flags=(),
+                    ambiguity=ambiguity,
+                    annotation_notes=notes if notes else "golden set annotation",
+                    annotator_id=annotator_id,
+                )
+                
+                # If expected guidance is provided, mark it completely complete
+                if expected_guidance.strip():
+                    save_expected_guidance(
+                        config, 
+                        queue_name=queue_name, 
+                        example_id=example_id, 
+                        guidance=expected_guidance
+                    )
+                    
+                st.success("Saved.")
+                if st.session_state[state_key] < len(queue) - 1:
+                    st.session_state[state_key] += 1
+                st.rerun()
+            except (AnnotationError, ValueError) as error:
+                st.error(str(error))
 
     if st.button("Skip (remains incomplete)"):
         try:
