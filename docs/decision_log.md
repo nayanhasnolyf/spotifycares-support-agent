@@ -112,3 +112,15 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-15
 - **Decision:** The evaluation harness defaults to offline cache replays. New API calls require an explicit `--live` flag, and evaluating the golden queue requires `--golden-confirmed`.
 - **Rationale:** This ensures deterministic regression testing, prevents accidental API quota burn, and guarantees that golden set examples are not unblinded or altered unexpectedly.
+
+## D017 — Gemini fallback for provider failures
+
+- **Date:** 2026-09-15
+- **Decision:** Add Gemini as a configurable fallback provider when Groq (the primary) fails due to rate limits, quota exhaustion, timeouts, or authentication errors. Both machine annotation and agent evaluation pipelines support this fallback.
+- **Rationale:** Groq's free tier enforces aggressive token-per-minute limits that cause frequent `provider_unavailable` errors during batch processing. Gemini fallback improves run completion without changing the annotation schema or weakening validation. Machine annotations remain machine-generated regardless of which provider produced them. Provider-specific quotas can still halt a run; fallback does not eliminate rate limits. The actual provider and model are recorded in `request_controls.fallback` for successful fallback records, preserving run-level provenance integrity. Human and golden labels are never modified by provider selection.
+
+## D018 — Bounded rate limit behavior isolation
+
+- **Date:** 2026-09-16
+- **Decision:** Provider fallback to Gemini is intentionally not triggered when Groq stops due to internal quota pacing (`ProviderPause`). The annotation runner correctly respects the primary provider's token budget wait time instead of immediately bypassing it.
+- **Rationale:** If fallback bypassed token budget limitations, Groq's pace configuration would become meaningless as every wait would simply divert to Gemini. Maintaining `ProviderPause` ensures the primary model continues operating at its maximum allowed volume, while Gemini only activates for true API errors or complete exhaustion, keeping the distribution faithful to the primary provider where possible. Human labels and existing successes remain completely protected during these pauses.

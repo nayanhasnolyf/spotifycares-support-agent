@@ -68,13 +68,19 @@ Interact with the agent directly from the command line:
 uv run spotify-cares agent-demo --message "My music stops playing randomly"
 ```
 
-### 4. Agent Demo (Streamlit)
+### 4. Machine Annotation with Provider Fallback
+Groq is the primary LLM provider; Gemini is used as a fallback when Groq fails due to unrecoverable API errors. Verified behavior correctly respects Groq's internal token pacing (`ProviderPause`) rather than blindly bypassing it, allowing Groq to maintain its maximum allowed volume. Both providers produce machine-generated labels — fallback improves overall robustness without corrupting provenance, and all human golden labels remain completely protected and frozen.
+```bash
+uv run --env-file .env spotify-cares machine-annotate --queue training --provider groq --fallback-provider gemini --limit 5
+```
+
+### 5. Agent Demo (Streamlit)
 Run the web-based interactive demo:
 ```bash
 uv run streamlit run app/agent_app.py
 ```
 
-### 5. Automated Tests
+### 6. Automated Tests
 ```bash
 $env:TMP="C:\temp"
 $env:TEMP="C:\temp"

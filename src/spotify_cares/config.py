@@ -111,6 +111,8 @@ class AnnotationSettings(StrictModel):
     training_pilot_size: int
     machine_model: str | None = None
     machine_provider: Literal["gemini", "groq"] = "gemini"
+    machine_fallback_provider: Literal["gemini", "groq"] | None = None
+    machine_fallback_model: str | None = None
     groq_model: str = "openai/gpt-oss-20b"
     groq_prompt_path: Path = Path("configs/machine_annotation_prompt.txt")
     groq_prompt_profile: Literal["full", "compact-v1"] = "full"

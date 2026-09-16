@@ -127,6 +127,8 @@ def build_parser() -> argparse.ArgumentParser:
         machine_parser.add_argument("--queue", choices=("training", "development"), required=True)
         machine_parser.add_argument("--model", help="override annotation.machine_model from project configuration")
         machine_parser.add_argument("--provider", choices=("gemini", "groq"), help="override annotation.machine_provider")
+        machine_parser.add_argument("--fallback-provider", choices=("gemini", "groq"), help="fallback provider if primary fails")
+        machine_parser.add_argument("--fallback-model", help="override model for fallback provider")
         machine_parser.add_argument("--prompt", type=Path, help="override the configured provider prompt")
         if command == "machine-annotate":
             machine_parser.add_argument("--selection", type=Path, help="pinned queue/run/example IDs; resumes cannot extend this selection")
@@ -157,6 +159,8 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate_parser.add_argument("--systems", type=str, default="trivial,tfidf,agent", help="comma-separated systems to evaluate")
     evaluate_parser.add_argument("--queue", choices=("development", "golden"), default="development")
     evaluate_parser.add_argument("--live", action="store_true", help="allow live inference/API calls on cache miss")
+    evaluate_parser.add_argument("--fallback-provider", choices=("gemini", "groq"), help="fallback provider for agent evaluation")
+    evaluate_parser.add_argument("--fallback-model", help="fallback model for agent evaluation")
     evaluate_parser.add_argument("--golden-confirmed", action="store_true", help="explicitly unlock golden queue evaluation")
     evaluate_parser.add_argument("--output", type=Path, default=Path("artifacts/evaluation/report.json"), help="report output path")
     
@@ -200,8 +204,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             config = load_config(args.config)
             systems = [s.strip() for s in args.systems.split(",") if s.strip()]
+            agent_settings = load_agent_settings(args.settings)
+            if args.fallback_provider:
+                agent_settings.fallback_provider = args.fallback_provider
+            if args.fallback_model:
+                agent_settings.fallback_model = args.fallback_model
             report = run_evaluation(
-                config, load_settings(args.baselines), load_agent_settings(args.settings),
+                config, load_settings(args.baselines), agent_settings,
                 args.queue, systems, args.live, args.golden_confirmed
             )
             args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -257,7 +266,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             operation = machine_annotate if args.command == "machine-annotate" else combined_machine_manifest
             options = {"limit": args.limit, "retry_unknown_quota": args.retry_unknown_quota,
-                       "selection_path": args.selection} if args.command == "machine-annotate" else {}
+                       "selection_path": args.selection,
+                       "fallback_provider_name": args.fallback_provider,
+                       "fallback_model": args.fallback_model} if args.command == "machine-annotate" else {}
             if args.command == "validate-machine-annotations":
                 options["write"] = False
             report = operation(load_config(args.config), args.queue, model=args.model,

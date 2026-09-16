@@ -99,3 +99,47 @@ def test_run_evaluation_golden_protection(annotation_config, tmp_path):
     # Need golden confirmed
     with pytest.raises(AnnotationError, match="golden"):
         run_evaluation(annotation_config, bs, None, "golden", ["trivial"], False, False)
+
+def test_agent_generate_fallback(annotation_config, tmp_path, monkeypatch):
+    from spotify_cares.agent import AgentSettings, generate
+    from spotify_cares.groq_annotation import GroqHTTPError
+    import spotify_cares.agent as agent_module
+    
+    settings = AgentSettings(
+        provider="groq", fallback_provider="gemini", fallback_model="gem-model",
+        embedding_revision="1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+    )
+    
+    # Mock compact_policy to avoid requiring frozen guide
+    monkeypatch.setattr(agent_module, "compact_policy", lambda tax, guide: "synthetic policy")
+    # Mock the agent prompt file
+    prompt_path = tmp_path / "agent_prompt.txt"
+    prompt_path.write_text("synthetic agent prompt\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "agent_prompt.txt").write_text("synthetic agent prompt\n", encoding="utf-8")
+    
+    class FakeGroq:
+        def __init__(self, config): pass
+        def __call__(self, **kwargs):
+            from google.genai.errors import APIError
+            raise APIError(503, {'error': {'message': 'Groq unavailable'}})
+        def close(self): pass
+        
+    class FakeGemini:
+        def __init__(self, config=None): pass
+        def __call__(self, **kwargs):
+            import json
+            return json.dumps({"draft_reply": "Thank you for reaching out.", "evidence_ids": [], "insufficient_evidence": True}), "gem-model"
+        def close(self): pass
+        
+    monkeypatch.setattr(agent_module, "GroqProvider", FakeGroq)
+    monkeypatch.setattr(agent_module, "GeminiProvider", FakeGemini)
+    
+    draft, record = generate(annotation_config, settings, "hello", [], [])
+    assert record["fallback"] is False
+    assert record["provider"] == "gemini"
+    assert record["model"] == "gem-model"
+    # attempts: error from groq, fallback_switch marker, then response from gemini
+    assert any(a["status"] == "error" for a in record["attempts"])
+    assert any(a.get("status") == "fallback_switch" for a in record["attempts"])

@@ -302,3 +302,20 @@ def test_successes_preserved_when_later_provider_request_fails(annotation_config
     report = machine_annotate(annotation_config, 'training', model='synthetic', provider=fail)
     assert report['validated_successes'] == 1 and report['unresolved_failures'] == 1
     assert Path(report['path']).read_bytes().startswith(saved)
+
+
+def test_fallback_provider_succeeds_after_primary_fails(annotation_config):
+    from google.genai.errors import APIError
+    _complete_pilot(annotation_config)
+    freeze(annotation_config)
+    def fail(**kwargs):
+        raise APIError(503, {'error': {'message': 'Synthetic unavailable'}})
+    
+    report = machine_annotate(annotation_config, 'training', model='synthetic', provider=fail,
+                              provider_name='groq',
+                              fallback_provider_name='gemini', fallback_model='fallback-model', fallback_provider=fake)
+    assert report['complete']
+    assert report['validated_successes'] == 1
+    events = load_events(Path(report['path']))
+    assert events[0].request_controls['fallback']['actual_provider'] == 'gemini'
+    assert events[0].request_controls['fallback']['actual_model'] == 'fallback-model'

@@ -396,6 +396,7 @@ def excluded_records(config, queue_name):
 
 def machine_annotate(config, queue_name, *, model=None, prompt_path=None, limit=None, provider=None,
                      provider_name=None,
+                     fallback_provider=None, fallback_provider_name=None, fallback_model=None,
                      retry_unknown_quota=False, selection_path=None):
     if limit is not None and limit < 1:
         raise AnnotationError("limit must be positive")
@@ -469,12 +470,20 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=None, limit=
                 wait = max(0, (evidence.retry_not_before - datetime.now(timezone.utc)).total_seconds())
                 if wait > rate.max_single_wait_seconds or wait > rate.max_total_retry_wait_seconds:
                     raise AnnotationError(f"server retry wait is still {wait:.1f}s; defer and resume later")
+        if fallback_provider is None:
+            pass # just a placeholder if it wasn't passed, we'll assign it inside owned_provider
         if owned_provider:
             if provider_name == "groq":
                 from spotify_cares.groq_annotation import GroqProvider
                 provider = GroqProvider(config)
             else:
                 provider = GeminiProvider()
+            if fallback_provider_name:
+                if fallback_provider_name == "groq":
+                    from spotify_cares.groq_annotation import GroqProvider
+                    fallback_provider = GroqProvider(config)
+                else:
+                    fallback_provider = GeminiProvider()
         try:
             work = deque(pending)
             retries, waited, calls, last_started = {}, 0.0, 0, None
@@ -514,22 +523,43 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=None, limit=
                 decision, error, resolved_model, http_status, rate_evidence = None, None, None, None, None
                 last_started = time.monotonic()
                 calls += 1
+                used_provider = provider_name
+                fallback_succeeded = False
                 try:
                     raw, resolved_model = provider(model=model, system=system, schema=schema, message=inputs[eid])
                 except Exception as exc:
                     from spotify_cares.groq_annotation import ProviderPause, GroqHTTPError
-                    if isinstance(exc, ProviderPause):
-                        halt_reason = str(exc)
-                        break  # No attempted label: still pending; reservations remain conservative.
-                    error = "provider_error"
-                    # Never persist or print exception text, which may echo credentials/input.
-                    from google.genai.errors import APIError
-                    if isinstance(exc, APIError) and isinstance(exc.code, int) and 100 <= exc.code <= 599:
-                        http_status = exc.code
-                        rate_evidence = extract_rate_evidence(exc, http_status)
-                    elif isinstance(exc, GroqHTTPError):
-                        http_status, rate_evidence = exc.status, exc.evidence
+                    if fallback_provider and not isinstance(exc, ProviderPause):
+                        try:
+                            raw, resolved_model = fallback_provider(model=fallback_model or model, system=system, schema=schema, message=inputs[eid])
+                            used_provider = fallback_provider_name
+                            fallback_succeeded = True
+                        except Exception:
+                            pass  # Fall through to original error handling below
+                    if not fallback_succeeded:
+                        if isinstance(exc, ProviderPause):
+                            halt_reason = str(exc)
+                            break  # No attempted label: still pending; reservations remain conservative.
+                        error = "provider_error"
+                        # Never persist or print exception text, which may echo credentials/input.
+                        from google.genai.errors import APIError
+                        if isinstance(exc, APIError) and isinstance(exc.code, int) and 100 <= exc.code <= 599:
+                            http_status = exc.code
+                            rate_evidence = extract_rate_evidence(exc, http_status)
+                        elif isinstance(exc, GroqHTTPError):
+                            http_status, rate_evidence = exc.status, exc.evidence
                 else:
+                    if not raw:
+                        error = "empty_output"
+                    else:
+                        try:
+                            decision = decision_model(provenance).model_validate_json(raw)
+                            if isinstance(decision, MachineClassification) and decision.expected_reply_guidance is not None:
+                                raise ValueError("classification-only generation must not produce reply guidance")
+                            validate_decision(decision, taxonomy)
+                        except (ValueError, ValidationError):
+                            decision, error = None, "invalid_output"
+                if fallback_succeeded:
                     if not raw:
                         error = "empty_output"
                     else:
@@ -551,6 +581,9 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=None, limit=
                     raise AnnotationError("human annotations changed; response discarded")
                 if any(sha256_file(Path(s["path"])) != s["file_sha256"] for s in retained_sources):
                     raise AnnotationError("retained source changed; response discarded")
+                fallback_info = None
+                if used_provider != provider_name:
+                    fallback_info = {"actual_provider": used_provider, "actual_model": fallback_model or model}
                 record = MachineRecord(
                     queue_name=queue_name, example_id=eid, input_sha256=digest(inputs[eid]),
                     run_sha256=digest(provenance), provenance=provenance,
@@ -564,7 +597,8 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=None, limit=
                     request_controls={"scheduler_version": "bounded-rate-v1", **rate.model_dump(),
                                       "selection_sha256": selection_hash,
                                       "provider_controls": getattr(provider, "last_controls", None),
-                                      "unknown_quota_retry_confirmed": retry_unknown_quota},
+                                      "unknown_quota_retry_confirmed": retry_unknown_quota,
+                                      "fallback": fallback_info},
                 )
                 _append_jsonl(path, record.model_dump(mode="json"))
                 latest[eid] = record
@@ -579,6 +613,8 @@ def machine_annotate(config, queue_name, *, model=None, prompt_path=None, limit=
         finally:
             if owned_provider:
                 provider.close()
+                if fallback_provider:
+                    fallback_provider.close()
     report = combined_machine_manifest(config, queue_name, model=model, prompt_path=prompt_path,
                                       provider_name=provider_name)
     report["halt_reason"] = halt_reason

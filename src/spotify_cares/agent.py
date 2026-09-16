@@ -29,6 +29,8 @@ class AgentSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     provider: Literal["groq", "gemini"] = "groq"
     model: str = "openai/gpt-oss-20b"
+    fallback_provider: Literal["groq", "gemini"] | None = None
+    fallback_model: str | None = None
     embedding_revision: str = Field(pattern=r"^[a-f0-9]{40}$")
     cache_dir: Path = Path("artifacts/semantic")
     model_cache: Path = Path(".cache/huggingface/hub")
@@ -183,14 +185,15 @@ def generate(config, settings, message, context, evidence, provider=None):
     ledger = config.artifacts.directory / "agent" / "generation_events.jsonl"
     ledger.parent.mkdir(parents=True, exist_ok=True)
     try:
-        # Same lock/ledger as annotation Groq calls: do not multiply account allowance.
-        with run_lock(config.annotation.output_dir / "machine" / "generation.lock"):
-            if owned:
-                provider = GroqProvider(provider_config) if settings.provider == "groq" else GeminiProvider()
+        def attempt_with(prov_name, prov_model, prov_instance):
+            record["fallback"] = False
+            if "error" in record:
+                del record["error"]
+            if "pause_reason" in record:
+                del record["pause_reason"]
             for attempt in range(settings.max_retries + 1):
                 try:
-                    if settings.provider == "gemini":
-                        # Persistent pacing for separate CLI processes, even after a crash.
+                    if prov_name == "gemini":
                         previous = [json.loads(l) for l in ledger.read_text(encoding="utf-8").splitlines()] if ledger.exists() else []
                         same = [r for r in previous if r.get("provider") == "gemini"]
                         if same:
@@ -200,15 +203,17 @@ def generate(config, settings, message, context, evidence, provider=None):
                             if wait > settings.max_wait_seconds:
                                 raise ProviderPause("Gemini pacing requires deferred resume")
                             time.sleep(wait)
-                    _append_jsonl(ledger, {"time": time.time(), "provider": settings.provider, "model": settings.model, "kind": "attempt"})
-                    raw, model_version = provider(model=settings.model, system=system,
+                    _append_jsonl(ledger, {"time": time.time(), "provider": prov_name, "model": prov_model, "kind": "attempt"})
+                    raw, model_version = prov_instance(model=prov_model, system=system,
                         schema=GeneratedDraft.model_json_schema(), message=payload)
                     record["attempts"].append({"status": "response", "model_version": model_version,
-                                               "controls": getattr(provider,"last_controls",None)})
-                    record["generation_settings"] = {"temperature":0, "max_output_tokens":settings.max_output_tokens if settings.provider=="groq" else 2048,
-                                                       "reasoning_effort":"low" if settings.provider=="groq" else None}
+                                               "controls": getattr(prov_instance,"last_controls",None)})
+                    record["generation_settings"] = {"temperature":0, "max_output_tokens":settings.max_output_tokens if prov_name=="groq" else 2048,
+                                                       "reasoning_effort":"low" if prov_name=="groq" else None}
+                    record["provider"] = prov_name
+                    record["model"] = prov_model
                     draft = validate_draft(raw or "", evidence)
-                    return draft, record
+                    return draft
                 except (ValueError, TypeError) as exc:
                     record.update(fallback=True, error="unsupported_action_or_current_fact_claim" if "unsupported_action" in str(exc) else "invalid_generation")
                     break
@@ -218,16 +223,36 @@ def generate(config, settings, message, context, evidence, provider=None):
                     record["attempts"].append({"status":"error", "http_status": status if isinstance(status,int) else None,
                                               "category":rate.category, "error_type":type(exc).__name__})
                     if isinstance(exc,ProviderPause):
-                        record["pause_reason"] = str(exc)  # internal safe message, never provider body
+                        record["pause_reason"] = str(exc)
                     if rate.category == "temporary" and attempt < settings.max_retries:
                         import random
                         delay=retry_wait(config.annotation.machine_rate,attempt,rate,datetime.now(timezone.utc),random.uniform(0,1))
                         if delay <= settings.max_wait_seconds:
                             time.sleep(delay)
                             continue
-                    _append_jsonl(ledger,{"time":time.time(),"provider":settings.provider,"model":settings.model,"blocked":True,"category":rate.category})
+                    _append_jsonl(ledger,{"time":time.time(),"provider":prov_name,"model":prov_model,"blocked":True,"category":rate.category})
                     record.update(fallback=True,error="provider_unavailable")
                     break
+            return None
+
+        # Same lock/ledger as annotation Groq calls: do not multiply account allowance.
+        with run_lock(config.annotation.output_dir / "machine" / "generation.lock"):
+            if owned:
+                provider = GroqProvider(provider_config) if settings.provider == "groq" else GeminiProvider()
+            
+            draft = attempt_with(settings.provider, settings.model, provider)
+            if draft is not None:
+                return draft, record
+                
+            if record.get("fallback") and settings.fallback_provider:
+                fallback_prov = GroqProvider(provider_config) if settings.fallback_provider == "groq" else GeminiProvider()
+                try:
+                    record["attempts"].append({"status": "fallback_switch", "from": settings.provider, "to": settings.fallback_provider})
+                    draft = attempt_with(settings.fallback_provider, settings.fallback_model or settings.model, fallback_prov)
+                    if draft is not None:
+                        return draft, record
+                finally:
+                    fallback_prov.close()
     except AnnotationError as exc:
         record.update(fallback=True,error="provider_unavailable",pause_reason=str(exc))
     finally:
