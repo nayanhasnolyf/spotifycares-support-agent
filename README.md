@@ -26,13 +26,13 @@ The SpotifyCares Support Agent aims to assist human agents by pre-drafting respo
 *Live Evaluation Complete*
 We evaluate the Agent against two automated baselines:
 1. **Trivial Baseline (Majority Class):** Achieves 6.0% intent accuracy. Represents zero-intelligence guessing.
-2. **TF-IDF Baseline:** Achieves 6.0% intent accuracy. Represents standard lexical retrieval.
+2. **TF-IDF Baseline:** Achieves 5.3% intent accuracy. Represents standard lexical retrieval.
 3. **Agent (Retrieval-Grounded LLM):** Achieves 6.0% intent accuracy. Represents semantic understanding and context-aware drafting.
 
 ### 4. Five Observed Failure Modes
 *Live Evaluation Diagnostics & Pending Human Judge Analysis...*
 Based on live evaluation and preliminary architecture, we observe/expect the following failure modes:
-1. **[OBSERVED] Out-of-Vocabulary Intents:** The baseline models were fitted on only 25 training examples across limited classes, causing them to systematically miss the remaining classes, leading to identical 6.0% accuracy across all models. Inquiries outside the trained taxonomy cause unpredictable routing.
+1. **[OBSERVED] Out-of-Vocabulary Intents:** The baseline models were fitted on only 61 training examples, causing them to systematically miss remaining classes, locking baseline accuracy around ~5-6%. Inquiries outside the trained taxonomy cause unpredictable routing.
 2. **[PENDING] Retrieval Mismatch:** Sparse or vague queries retrieve irrelevant historical conversations, leading to confusing drafts.
 3. **[PENDING] Strict Fallback Over-Escalation:** The strict policy engine flags safe queries if they mimic security vocabulary.
 4. **[PENDING] Provider Rate Limiting:** Real-time generation pauses when LLM providers rate-limit, falling back to ACK templates.

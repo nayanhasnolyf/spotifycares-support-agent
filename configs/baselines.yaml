@@ -1,4 +1,4 @@
-manifest_path: data/labels/annotation/machine/combined/training/5dd9b2d234c097936c9a2a818f39df431d48e8d149dc83f573ebc1717e14b0c4.json
+manifest_path: data/labels/annotation/machine/combined/training/f03d47027b6d64b69098a1ea46e3c3d3d07c1ab15042450fc866c41b47ac050e.json
 max_features: 30000
 ngram_max: 2
 logistic_c: 1.0
