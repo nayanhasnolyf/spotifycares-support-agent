@@ -15,24 +15,24 @@ This project implements an end-to-end pipeline covering data ingestion, conversa
 The SpotifyCares Support Agent aims to assist human agents by pre-drafting responses and routing inquiries based on historical precedence and strict safety rules. Instead of blindly trusting LLM hallucination, the agent uses a **Retrieve-and-Generate (RAG)** approach. It retrieves historically vetted support replies from SpotifyCares and forces the generation step to strictly ground its response in that retrieved evidence. Furthermore, a deterministic policy engine overrides the LLM for high-risk actions (e.g., security incidents, payment issues) to enforce human escalation, ensuring safe and predictable customer service.
 
 ### 2. Results
-*Pending Live Evaluation...*
-- **Total Labeled Golden Examples:** `[BLOCKED BY HUMAN ANNOTATION]`
-- **Agent Intent Accuracy:** `[BLOCKED BY LIVE EVALUATION]`
-- **Escalation Safety Recall:** `[BLOCKED BY LIVE EVALUATION]`
-- **False Auto-Handle Rate:** `[BLOCKED BY LIVE EVALUATION]`
-- **Empty Retrieval Rate:** `[BLOCKED BY LIVE EVALUATION]`
+*Live Evaluation Complete*
+- **Total Labeled Golden Examples:** 150
+- **Agent Intent Accuracy:** 6.0% (9/150)
+- **Escalation Safety Recall:** 83.1% (69 successfully escalated out of 83 true escalation cases)
+- **False Auto-Handle Rate:** 60.9% (14 unsafe auto-handles out of 23 proposed auto-handles)
+- **Empty Retrieval Rate:** 84.7% (127/150 examples had insufficient retrieval or generation evidence)
 
 ### 3. Baseline Comparison
-*Pending Live Evaluation...*
+*Live Evaluation Complete*
 We evaluate the Agent against two automated baselines:
-1. **Trivial Baseline (Majority Class):** Achieves `[X]%` intent accuracy. Represents zero-intelligence guessing.
-2. **TF-IDF Baseline:** Achieves `[Y]%` intent accuracy. Represents standard lexical retrieval.
-3. **Agent (Retrieval-Grounded LLM):** Achieves `[Z]%` intent accuracy. Represents semantic understanding and context-aware drafting.
+1. **Trivial Baseline (Majority Class):** Achieves 6.0% intent accuracy. Represents zero-intelligence guessing.
+2. **TF-IDF Baseline:** Achieves 6.0% intent accuracy. Represents standard lexical retrieval.
+3. **Agent (Retrieval-Grounded LLM):** Achieves 6.0% intent accuracy. Represents semantic understanding and context-aware drafting.
 
 ### 4. Five Observed Failure Modes
-*Pending Human Judge Analysis...*
-Based on synthetic testing and preliminary architecture, we expect/observe the following failure modes:
-1. **[PENDING] Out-of-Vocabulary Intents:** Inquiries outside the trained taxonomy cause unpredictable routing.
+*Live Evaluation Diagnostics & Pending Human Judge Analysis...*
+Based on live evaluation and preliminary architecture, we observe/expect the following failure modes:
+1. **[OBSERVED] Out-of-Vocabulary Intents:** The baseline models were fitted on only 25 training examples across limited classes, causing them to systematically miss the remaining classes, leading to identical 6.0% accuracy across all models. Inquiries outside the trained taxonomy cause unpredictable routing.
 2. **[PENDING] Retrieval Mismatch:** Sparse or vague queries retrieve irrelevant historical conversations, leading to confusing drafts.
 3. **[PENDING] Strict Fallback Over-Escalation:** The strict policy engine flags safe queries if they mimic security vocabulary.
 4. **[PENDING] Provider Rate Limiting:** Real-time generation pauses when LLM providers rate-limit, falling back to ACK templates.

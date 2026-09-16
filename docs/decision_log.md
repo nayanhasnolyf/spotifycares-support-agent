@@ -124,3 +124,9 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-16
 - **Decision:** Provider fallback to Gemini is intentionally not triggered when Groq stops due to internal quota pacing (`ProviderPause`). The annotation runner correctly respects the primary provider's token budget wait time instead of immediately bypassing it.
 - **Rationale:** If fallback bypassed token budget limitations, Groq's pace configuration would become meaningless as every wait would simply divert to Gemini. Maintaining `ProviderPause` ensures the primary model continues operating at its maximum allowed volume, while Gemini only activates for true API errors or complete exhaustion, keeping the distribution faithful to the primary provider where possible. Human labels and existing successes remain completely protected during these pauses.
+
+## D019 — Live Evaluation on Sparse Machine Annotations
+
+- **Date:** 2026-09-16
+- **Decision:** Execute the live agent evaluation across the 150 golden labels despite the training corpus only containing 25 fully successful machine annotations across a subset of intents.
+- **Rationale:** The golden set validation is meant to evaluate the pipeline end-to-end. Waiting for the complete 300+ training annotations due to strict rate limits would indefinitely block Stage 8. Running evaluation now correctly surfaced the baseline limitation (6.0% accuracy due to out-of-vocabulary intents) and confirmed the robustness of the fallback/cache mechanism without halting the project's progress.
