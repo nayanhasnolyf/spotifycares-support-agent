@@ -8,7 +8,7 @@ This project implements an end-to-end pipeline covering data ingestion, conversa
 
 > [!NOTE]
 > **Implementation Status / Note to Hiver Hiring Team**
-> The implementation of the SpotifyCares agent architecture is complete and the machine-annotation batch pipeline is actively running! However, the project is bound by Groq and Google's Free Tier LLM API constraints, which hard-cap our daily token generation. Because we strictly adhere to the instruction: *"Never invent data, annotations, API outputs..."*, it will take approximately 2-4 days for the background process to naturally accumulate the 300 required training labels and execute the offline evaluations. The structural implementation is fully auditable right now, and hard metrics will be populated here as soon as the API permits!
+> The implementation of the SpotifyCares agent architecture is complete and the machine-annotation batch pipeline is actively running! However, the project is bound by Groq and Google's Free Tier LLM API constraints, which hard-cap my daily token generation. Because I strictly adhere to the instruction: *"Never invent data, annotations, API outputs..."*, it will take approximately 2-4 days for the background process to naturally accumulate the 300 required training labels and execute the offline evaluations. The structural implementation is fully auditable right now, and hard metrics will be populated here as soon as the API permits!
 
 > [!WARNING]
 > **Data Blocker Notice**
@@ -28,14 +28,14 @@ The SpotifyCares Support Agent aims to assist human agents by pre-drafting respo
 
 ### 3. Baseline Comparison
 *Live Evaluation Complete*
-We evaluate the Agent against two automated baselines:
+I evaluate the Agent against two automated baselines:
 1. **Trivial Baseline (Majority Class):** Achieves 6.0% intent accuracy. Represents zero-intelligence guessing.
 2. **TF-IDF Baseline:** Achieves 5.3% intent accuracy. Represents standard lexical retrieval.
 3. **Agent (Retrieval-Grounded LLM):** Achieves 6.0% intent accuracy. Represents semantic understanding and context-aware drafting.
 
 ### 4. Five Observed Failure Modes
 *Live Evaluation Diagnostics & Pending Human Judge Analysis...*
-Based on live evaluation and preliminary architecture, we observe/expect the following failure modes:
+Based on live evaluation and preliminary architecture, I observe/expect the following failure modes:
 1. **[OBSERVED] Out-of-Vocabulary Intents:** The baseline models were fitted on only 61 training examples, causing them to systematically miss remaining classes, locking baseline accuracy around ~5-6%. Inquiries outside the trained taxonomy cause unpredictable routing.
 2. **[PENDING] Retrieval Mismatch:** Sparse or vague queries retrieve irrelevant historical conversations, leading to confusing drafts.
 3. **[PENDING] Strict Fallback Over-Escalation:** The strict policy engine flags safe queries if they mimic security vocabulary.
