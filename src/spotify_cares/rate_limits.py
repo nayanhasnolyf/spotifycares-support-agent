@@ -135,8 +135,10 @@ def extract_rate_evidence(exc, http_status, now=None):
         or (not violations and "QUOTA_EXCEEDED" not in reasons and (provided or any(r in reasons for r in ("rate_limit_exceeded", "too_many_requests", "RATE_LIMIT_EXCEEDED"))))
     ):
         category = "temporary"
+    elif http_status == 503:
+        category = "temporary"
     else:
-        category = "unknown" if http_status == 429 else "not_rate_limited"
+        category = "unknown" if http_status in (429, 503) else "not_rate_limited"
     return RateEvidence(category=category, violations=violations, reasons=sorted(set(reasons)),
                         retry_delay_seconds=delay, retry_after_seconds=retry_after,
                         retry_not_before=not_before)

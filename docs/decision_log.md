@@ -130,3 +130,9 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-16
 - **Decision:** Execute the live agent evaluation across the 150 golden labels despite the training corpus only containing 25 fully successful machine annotations across a subset of intents.
 - **Rationale:** The golden set validation is meant to evaluate the pipeline end-to-end. Waiting for the complete 300+ training annotations due to strict rate limits would indefinitely block Stage 8. Running evaluation now correctly surfaced the baseline limitation (6.0% accuracy due to out-of-vocabulary intents) and confirmed the robustness of the fallback/cache mechanism without halting the project's progress.
+
+## D020 - Pause Live Evaluation Due to Hard API Rate Limits
+
+- **Date:** 2026-09-18
+- **Decision:** Commit the current evaluation progress (102/150 examples completed) and block the remainder of the stage due to API credential limits.
+- **Rationale:** The newly provided API keys have both hit their daily free-tier caps (Groq: 14,400 tokens/day; Gemini: 20 requests/day). A patch was added to properly treat Gemini's 503 errors as temporary and upgrade to \gemini-3.6-flash\, but because both APIs are completely exhausted, the evaluation is stuck until tomorrow. As per repository rules, the verified implementation progress is committed and accurately reported as blocked by credentials.
