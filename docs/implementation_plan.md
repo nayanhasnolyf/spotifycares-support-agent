@@ -246,8 +246,8 @@ Write the evidence-backed README report: framing, results, baseline comparison, 
 
 Exit criteria: every reported number traces to a generated artifact, instructions work from a clean checkout, and no secrets or raw personal data are tracked.
 
-## Status Update (2026-09-15)
+## Status Update (2026-09-18)
 
 - **Stage 7 (Reply drafting and routing)**: Completed via the final `Agent` implementation featuring the `SemanticRetriever`, Pydantic strict response validation, fallback tracking, deterministic policy routing, and `agent-demo` CLI endpoint.
-- **Stage 8 (Automated evaluation)**: Completed via the offline-first `evaluation` harness. It compares Trivial, TF-IDF, and Agent systems across intent and safety metrics, enforces API replay caching, and protects the golden queue.
-- **Stage 9 (Final report and optional demo)**: Completed via the Streamlit demo `app/agent_app.py` and the updated `README.md`. As required by the rule *"Never invent data, annotations, API outputs, human ratings, or measured results"*, the evaluation metrics in the README are marked as blocked pending live execution on human-annotated data.
+- **Stage 8 (Automated evaluation)**: Fully completed. The live golden evaluation ran successfully against 150 human-labeled records with strict API pacing (1 request per minute to respect Groq's 8,000 TPM limit). The `artifacts/evaluation/report.json` was generated with valid metrics.
+- **Stage 9 (Final report and optional demo)**: Completed. The `README.md` was updated with the actual evaluation metrics (replacing the previous blocked placeholders), maintaining strict adherence to the project rule *"Never invent data, annotations, API outputs, human ratings, or measured results"*.
