@@ -136,3 +136,9 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-18
 - **Decision:** Commit the current evaluation progress (102/150 examples completed) and block the remainder of the stage due to API credential limits.
 - **Rationale:** The newly provided API keys have both hit their daily free-tier caps (Groq: 14,400 tokens/day; Gemini: 20 requests/day). A patch was added to properly treat Gemini's 503 errors as temporary and upgrade to \gemini-3.6-flash\, but because both APIs are completely exhausted, the evaluation is stuck until tomorrow. As per repository rules, the verified implementation progress is committed and accurately reported as blocked by credentials.
+
+## D021 - Resume and Complete Live Evaluation
+
+- **Date:** 2026-09-19
+- **Decision:** Resume the evaluation pipeline without providing new keys because the API daily limits rolled over for the new day.
+- **Rationale:** The evaluation successfully picked up from where it was blocked and processed the remaining 48 examples. The intent accuracy increased to 36.0%, and the evaluation stage is now fully complete.

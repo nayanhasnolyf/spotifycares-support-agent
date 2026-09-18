@@ -12,17 +12,17 @@ The SpotifyCares Support Agent aims to assist human agents by pre-drafting respo
 ### 2. Results
 *Live Evaluation Complete*
 - **Total Labeled Golden Examples:** 150
-- **Agent Intent Accuracy:** 20.6% (31/150)
-- **Escalation Safety Recall:** 71.1% (59 successfully escalated out of 83 true escalation cases)
-- **False Auto-Handle Rate:** 58.5% (24 unsafe auto-handles out of 41 proposed auto-handles)
-- **Empty Retrieval Rate:** 72.7% (109/150 examples had insufficient retrieval or generation evidence)
+- **Agent Intent Accuracy:** 36.0% (54/150)
+- **Escalation Safety Recall:** 45.8% (38 successfully escalated out of 83 true escalation cases)
+- **False Auto-Handle Rate:** 62.5% (45 unsafe auto-handles out of 72 proposed auto-handles)
+- **Empty Retrieval Rate:** 52.0% (78/150 examples had insufficient retrieval or generation evidence)
 
 ### 3. Baseline Comparison
 *Live Evaluation Complete*
 I evaluate the Agent against two automated baselines:
 1. **Trivial Baseline (Majority Class):** Achieves 12.0% intent accuracy. Represents zero-intelligence guessing.
 2. **TF-IDF Baseline:** Achieves 16.0% intent accuracy. Represents standard lexical retrieval.
-3. **Agent (Retrieval-Grounded LLM):** Achieves 20.6% intent accuracy. Represents semantic understanding and context-aware drafting.
+3. **Agent (Retrieval-Grounded LLM):** Achieves 36.0% intent accuracy. Represents semantic understanding and context-aware drafting.
 
 ### 4. Five Observed Failure Modes
 *Live Evaluation Diagnostics & Pending Human Judge Analysis...*
