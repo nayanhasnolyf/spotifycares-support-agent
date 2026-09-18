@@ -130,6 +130,7 @@ class GeneratedDraft(BaseModel):
     draft_reply: str = Field(min_length=1, max_length=1200)
     evidence_ids: list[str] = Field(max_length=5)
     insufficient_evidence: bool
+    intent: str = Field(description="The primary intent of the customer inquiry.")
 
 
 def unsafe_claim(text):
@@ -258,7 +259,7 @@ def generate(config, settings, message, context, evidence, provider=None):
     finally:
         if owned and provider is not None:
             provider.close()
-    return GeneratedDraft(draft_reply=ACK + " A human should review this case before any reply is sent.",evidence_ids=[],insufficient_evidence=True), record
+    return GeneratedDraft(draft_reply=ACK + " A human should review this case before any reply is sent.",evidence_ids=[],insufficient_evidence=True, intent=""), record
 
 
 def run_agent(config, baseline_settings, settings, message, context=()):
@@ -268,8 +269,8 @@ def run_agent(config, baseline_settings, settings, message, context=()):
     retriever = SemanticRetriever(corpus,membership,settings,report["corpus_sha256"],sha256_file(config.annotation.split_dir / "preprocessing_manifest.json"))
     evidence = retriever.search(message,context)
     classifier = IntentBaselines(training,allowed,baseline_settings)
-    intent = classifier.predict(feature_text(message,context),"tfidf") if classifier.model is not None else None
     draft, generation = generate(config,settings,message,context,evidence)
+    intent = draft.intent if (draft and hasattr(draft, 'intent') and draft.intent) else (classifier.predict(feature_text(message,context),"tfidf") if classifier.model is not None else None)
     route = route_policy(direct_signals(message,context))
     reasons = [route["reason_code"]] if route["reason_code"] else []
     if generation["fallback"]:
