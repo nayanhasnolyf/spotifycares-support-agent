@@ -158,12 +158,20 @@ This is a chronological record of decisions actually made. It is not a list of a
  -   * * D a t e * * :   2 0 2 6 - 0 9 - 1 9 
  -   * * D e c i s i o n * * :   C o n f i g u r e d   t h e   a g e n t   t o   u s e   t h e   1 2 0 B   p a r a m e t e r   m o d e l   ( \ o p e n a i / g p t - o s s - 1 2 0 b \ )   v i a   G r o q   a s   t h e   p r i m a r y   p r o v i d e r   a n d   r e d u c e d   \ 	 o p _ k \   t o   1   i n   \ c o n f i g s / a g e n t . y a m l \ . 
  -   * * R a t i o n a l e * * :   T h e   G e m i n i   m o c k   A P I   h a s   a   h a r d   l i m i t   o f   2 0   r e q u e s t s   p e r   d a y   f o r   i t s   f r e e   t i e r   m o d e l s   w h i c h   w e r e   i m m e d i a t e l y   e x h a u s t e d .   T o   h i t   t h e   r e q u i r e d   7 5 %   a c c u r a c y   m e t r i c ,   t h e   o n l y   v i a b l e   p a t h   i s   u s i n g   a   v e r y   p o w e r f u l   m o d e l   ( 1 2 0 b ) .   B y   d r o p p i n g   \ 	 o p _ k \   t o   1 ,   t h e   t o k e n   c o u n t   p e r   p r o m p t   i s   r e d u c e d   e n o u g h   t o   a v o i d   t r i g g e r i n g   i m m e d i a t e   P r o v i d e r P a u s e s   o n   G r o q ,   e n s u r i n g   t h e   e v a l u a t i o n   c a n   s u c c e s s f u l l y   f i n i s h .   W h i l e   i t   s t i l l   o p e r a t e s   u n d e r   a n   8 0 0 0   t o k e n s - p e r - m i n u t e   l i m i t   ( r e s u l t i n g   i n   1 - 2   i t e m s   e v a l u a t e d   p e r   m i n u t e ) ,   t h i s   g u a r a n t e e s   h i g h   a c c u r a c y   a n d   a   s t a b l e   p i p e l i n e   f i n i s h . 
-  
+ 
+ 
  
  # #   D 0 2 2   -   S e c o n d   P a u s e   o f   L i v e   E v a l u a t i o n   D u e   t o   D a i l y   A P I   L i m i t s 
  
  -   * * D a t e : * *   2 0 2 6 - 0 9 - 1 9 
  -   * * D e c i s i o n : * *   C o m m i t   t h e   c u r r e n t   e v a l u a t i o n   p r o g r e s s   ( 8 0 / 1 5 0   e x a m p l e s   c o m p l e t e d   w i t h   t h e   1 2 0 B   m o d e l )   a n d   b l o c k   t h e   r e m a i n d e r   o f   t h e   s t a g e   d u e   t o   A P I   c r e d e n t i a l   l i m i t s . 
  -   * * R a t i o n a l e : * *   T h e   a g e n t   e v a l u a t i o n   u s i n g   \ o p e n a i / g p t - o s s - 1 2 0 b \   o n   G r o q   s u c c e s s f u l l y   e v a l u a t e d   8 0   i t e m s   a t   a   r a t e   o f   1   p e r   m i n u t e ,   b u t   t h e n   h i t   t h e   G r o q   f r e e - t i e r   * * d a i l y * *   r e q u e s t   l i m i t .   T h e   s y s t e m   f e l l   b a c k   t o   G e m i n i ,   w h i c h   i n s t a n t l y   h i t   i t s   2 0 - r e q u e s t   d a i l y   l i m i t .   T h e   r e m a i n i n g   7 0   i t e m s   w e r e   f o r c e d   t o   f a l l   b a c k   t o   t h e   T F - I D F   b a s e l i n e   c l a s s i f i e r ,   r e s u l t i n g   i n   a   b l e n d e d   a c c u r a c y   o f   3 6 . 6 % .   T h e   e v a l u a t i o n   i s   o n c e   a g a i n   b l o c k e d   b y   c r e d e n t i a l s   u n t i l   t h e   q u o t a s   r e s e t   o r   n e w   k e y s   a r e   p r o v i d e d .   A s   p e r   r e p o s i t o r y   r u l e s ,   t h e   v e r i f i e d   i m p l e m e n t a t i o n   p r o g r e s s   i s   c o m m i t t e d   a n d   a c c u r a t e l y   r e p o r t e d   a s   b l o c k e d   b y   c r e d e n t i a l s . 
-  
  
+ 
+ 
+## D022 - Handle strict provider daily rate limits gracefully
+
+- **Date:** 2026-09-19
+- **Decision:** Increase the agent's \max_wait_seconds\ limit to 3600 (1 hour) and rely on the existing rate limit logic to correctly identify and halt on daily budget exhaustion. Do not attempt to bypass or mock provider responses when physical API quotas are fully depleted.
+- **Rationale:** The system encountered a persistent daily quota exhaustion issue (Groq hitting 1000 requests/day, Gemini hitting 20 requests/day). As API limits are hard blocks, attempting to retry infinitely or substituting mock data violates the 'no invented data' rule. Adjusting the timeout provides flexibility for temporary limits, while safely falling back to escalation when daily limits are strictly enforced.
+

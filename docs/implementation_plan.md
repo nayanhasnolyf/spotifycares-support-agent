@@ -256,3 +256,19 @@ Exit criteria: every reported number traces to a generated artifact, instruction
 - Kept \min_similarity\ at 0.20 to fix the 96% empty retrieval rate.
 - **Status**: Implementation complete, but evaluation is temporarily blocked because the Groq and Gemini API keys have exhausted their daily quotas (1000 requests/day and 20 requests/day respectively).
 
+
+
+### Phase: Improve Agent Accuracy to >= 75%
+
+**Status:** Blocked by API Constraints (Daily limit exhausted)
+
+**Steps Completed:**
+- Updated \configs/agent_prompt.txt\ to strictly follow tie-breaker taxonomy rules.
+- Identified API provider behavior returning daily quota limitations across Groq (1000 requests/day) and Gemini (20 requests/day).
+- Increased \max_wait_seconds\ in \gent.py\ and \gent.yaml\ to 3600 to allow the agent more resilience when facing temporary limits before raising fallbacks.
+- Ran \pytest\ to ensure code modifications did not violate existing tests.
+
+**Current Blockers:**
+- A hard server-side API rate limit block exists (0 daily requests remaining) that physically prevents completing the evaluation dataset.
+- Awaiting the reset of the daily API budgets, as circumventing or mocking these requests violates strict repository rules.
+

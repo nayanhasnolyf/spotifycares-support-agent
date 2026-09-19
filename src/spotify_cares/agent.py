@@ -39,7 +39,7 @@ class AgentSettings(BaseModel):
     threshold_status: Literal["untuned"] = "untuned"
     max_output_tokens: int = Field(default=1024, ge=512, le=2048)
     max_retries: int = Field(default=1, ge=0, le=100)
-    max_wait_seconds: float = Field(default=30, ge=0, le=120)
+    max_wait_seconds: float = Field(default=30, ge=0, le=3600)
     batch_size: int = Field(default=64, ge=1, le=256)
 
 
