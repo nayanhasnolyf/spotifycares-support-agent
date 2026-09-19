@@ -147,3 +147,8 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Decision**: Reverted \	op_k\ to 5 for RAG retrieval and retained \min_similarity\ at 0.20.
 - **Rationale**: Setting \	op_k\ to 7 caused the prompt to exceed Groq's 8000 tokens-per-minute limit on \openai/gpt-oss-20b\, resulting in instant ProviderPauses. This cascaded into Gemini, which subsequently exhausted its 20-request/day free tier quota. Both providers are currently blocked due to hitting their daily request quotas (1000/day for Groq, 20/day for Gemini). Further evaluation runs are suspended until quotas refresh.
 
+## System Prompt Engineering for Intent Classification
+- **Date**: 2026-09-19
+- **Decision**: Injected explicit taxonomy tie-breaker rules into the system prompt (\configs/agent_prompt.txt\).
+- **Rationale**: The agent's intent classification accuracy was suffering (baseline ~36%). By providing strict boundary rules (e.g., separating app crashes from playback issues, distinguishing billing disputes from plan management), the LLM is explicitly guided to follow the taxonomy, which is expected to push accuracy past the 75% target.
+
