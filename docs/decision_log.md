@@ -142,3 +142,8 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-19
 - **Decision:** Resume the evaluation pipeline without providing new keys because the API daily limits rolled over for the new day.
 - **Rationale:** The evaluation successfully picked up from where it was blocked and processed the remaining 48 examples. The intent accuracy increased to 36.0%, and the evaluation stage is now fully complete.
+## API Quota and Rate Limit Adjustments
+- **Date**: 2026-09-19
+- **Decision**: Reverted \	op_k\ to 5 for RAG retrieval and retained \min_similarity\ at 0.20.
+- **Rationale**: Setting \	op_k\ to 7 caused the prompt to exceed Groq's 8000 tokens-per-minute limit on \openai/gpt-oss-20b\, resulting in instant ProviderPauses. This cascaded into Gemini, which subsequently exhausted its 20-request/day free tier quota. Both providers are currently blocked due to hitting their daily request quotas (1000/day for Groq, 20/day for Gemini). Further evaluation runs are suspended until quotas refresh.
+

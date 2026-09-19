@@ -251,3 +251,8 @@ Exit criteria: every reported number traces to a generated artifact, instruction
 - **Stage 7 (Reply drafting and routing)**: Completed via the final `Agent` implementation featuring the `SemanticRetriever`, Pydantic strict response validation, fallback tracking, deterministic policy routing, and `agent-demo` CLI endpoint.
 - **Stage 8 (Automated evaluation)**: Fully completed. The live golden evaluation ran successfully against 150 human-labeled records with strict API pacing (1 request per minute to respect Groq's 8,000 TPM limit). The `artifacts/evaluation/report.json` was generated with valid metrics.
 - **Stage 9 (Final report and optional demo)**: Completed. The `README.md` was updated with the actual evaluation metrics (replacing the previous blocked placeholders), maintaining strict adherence to the project rule *"Never invent data, annotations, API outputs, human ratings, or measured results"*.
+## RAG and Accuracy Improvements (Blocked on Quota)
+- Reverted \	op_k\ from 7 to 5 to keep the prompt payload under Groq's 8000 tokens-per-minute limit.
+- Kept \min_similarity\ at 0.20 to fix the 96% empty retrieval rate.
+- **Status**: Implementation complete, but evaluation is temporarily blocked because the Groq and Gemini API keys have exhausted their daily quotas (1000 requests/day and 20 requests/day respectively).
+

@@ -9,7 +9,7 @@ import re
 import time
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, create_model
 import yaml
 
 from spotify_cares.annotation import AnnotationError, _append_jsonl
@@ -34,7 +34,7 @@ class AgentSettings(BaseModel):
     embedding_revision: str = Field(pattern=r"^[a-f0-9]{40}$")
     cache_dir: Path = Path("artifacts/semantic")
     model_cache: Path = Path(".cache/huggingface/hub")
-    top_k: int = Field(default=5, ge=1, le=5)
+    top_k: int = Field(default=5, ge=1, le=10)
     min_similarity: float = Field(default=.35, ge=0, le=1)
     threshold_status: Literal["untuned"] = "untuned"
     max_output_tokens: int = Field(default=1024, ge=512, le=2048)
@@ -125,12 +125,16 @@ class SemanticRetriever:
         return hits
 
 
-class GeneratedDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    draft_reply: str = Field(min_length=1, max_length=1200)
-    evidence_ids: list[str] = Field(max_length=5)
-    insufficient_evidence: bool
-    intent: str = Field(description="The primary intent of the customer inquiry.")
+def build_draft_model(taxonomy_data):
+    intent_labels = tuple([i.label for i in taxonomy_data.intents] + [""])
+    return create_model(
+        'GeneratedDraft',
+        draft_reply=(str, Field(min_length=1, max_length=1200)),
+        evidence_ids=(list[str], Field(max_length=5)),
+        insufficient_evidence=(bool, ...),
+        intent=(Literal[intent_labels], Field(description="The primary intent of the customer inquiry.")),
+        __config__=ConfigDict(extra="forbid", strict=True)
+    )
 
 
 def unsafe_claim(text):
@@ -161,8 +165,8 @@ def direct_signals(message, context=()):
     return PolicySignals(current_security_incident=security, payment_investigation=payment, private_account_action=action)
 
 
-def validate_draft(raw, evidence):
-    draft = GeneratedDraft.model_validate_json(raw)
+def validate_draft(draft_model, raw, evidence):
+    draft = draft_model.model_validate_json(raw)
     allowed = {e["example_id"] for e in evidence}
     if not draft.draft_reply.strip() or len(set(draft.evidence_ids)) != len(draft.evidence_ids) or not set(draft.evidence_ids) <= allowed:
         raise ValueError("invalid evidence IDs or empty draft")
@@ -172,12 +176,14 @@ def validate_draft(raw, evidence):
 
 
 def generate(config, settings, message, context, evidence, provider=None):
+    taxonomy_data = load_taxonomy(config.annotation.taxonomy_path)
+    DraftModel = build_draft_model(taxonomy_data)
     system = Path("configs/agent_prompt.txt").read_text(encoding="utf-8") + compact_policy(
-        load_taxonomy(config.annotation.taxonomy_path), config.annotation.guide_path.read_text(encoding="utf-8"))
+        taxonomy_data, config.annotation.guide_path.read_text(encoding="utf-8"))
     payload = {"customer_message": redact_text(message,safe_domains=())[0],
                "preceding_context": [redact_text(t,safe_domains=())[0] for t in context], "retrieved_untrusted_examples": evidence}
     record = {"provider": settings.provider, "model": settings.model, "prompt_sha256": digest(system),
-              "input_sha256": digest(payload), "schema_sha256": digest(GeneratedDraft.model_json_schema()),
+              "input_sha256": digest(payload), "schema_sha256": digest(DraftModel.model_json_schema()),
               "attempts": [], "fallback": False}
     owned = provider is None
     provider_config = config.model_copy(deep=True)
@@ -206,14 +212,14 @@ def generate(config, settings, message, context, evidence, provider=None):
                             time.sleep(wait)
                     _append_jsonl(ledger, {"time": time.time(), "provider": prov_name, "model": prov_model, "kind": "attempt"})
                     raw, model_version = prov_instance(model=prov_model, system=system,
-                        schema=GeneratedDraft.model_json_schema(), message=payload)
+                        schema=DraftModel.model_json_schema(), message=payload)
                     record["attempts"].append({"status": "response", "model_version": model_version,
                                                "controls": getattr(prov_instance,"last_controls",None)})
                     record["generation_settings"] = {"temperature":0, "max_output_tokens":settings.max_output_tokens if prov_name=="groq" else 2048,
                                                        "reasoning_effort":"low" if prov_name=="groq" else None}
                     record["provider"] = prov_name
                     record["model"] = prov_model
-                    draft = validate_draft(raw or "", evidence)
+                    draft = validate_draft(DraftModel, raw or "", evidence)
                     return draft
                 except (ValueError, TypeError) as exc:
                     record.update(fallback=True, error="unsupported_action_or_current_fact_claim" if "unsupported_action" in str(exc) else "invalid_generation")
@@ -231,7 +237,7 @@ def generate(config, settings, message, context, evidence, provider=None):
                         if delay <= settings.max_wait_seconds:
                             time.sleep(delay)
                             continue
-                    _append_jsonl(ledger,{"time":time.time(),"provider":prov_name,"model":prov_model,"blocked":True,"category":rate.category})
+                    _append_jsonl(ledger,{"time":time.time(),"provider":prov_name,"model":prov_model,"blocked":True,"category":rate.category, "error_msg": str(exc), "error_type": type(exc).__name__})
                     record.update(fallback=True,error="provider_unavailable")
                     break
             return None
@@ -259,7 +265,7 @@ def generate(config, settings, message, context, evidence, provider=None):
     finally:
         if owned and provider is not None:
             provider.close()
-    return GeneratedDraft(draft_reply=ACK + " A human should review this case before any reply is sent.",evidence_ids=[],insufficient_evidence=True, intent=""), record
+    return DraftModel(draft_reply=ACK + " A human should review this case before any reply is sent.",evidence_ids=[],insufficient_evidence=True, intent=""), record
 
 
 def run_agent(config, baseline_settings, settings, message, context=()):
