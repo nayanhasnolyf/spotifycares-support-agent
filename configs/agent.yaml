@@ -1,11 +1,11 @@
 provider: groq
-model: openai/gpt-oss-20b
+model: openai/gpt-oss-120b
 fallback_provider: gemini
-fallback_model: gemini-3.6-flash
+fallback_model: gemini-3.8-flash
 embedding_revision: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41
 cache_dir: artifacts/semantic
 model_cache: .cache/huggingface/hub
-top_k: 5
+top_k: 1
 min_similarity: 0.20
 threshold_status: untuned
 max_output_tokens: 1024

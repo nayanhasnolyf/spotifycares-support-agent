@@ -129,8 +129,8 @@ def build_draft_model(taxonomy_data):
     intent_labels = tuple([i.label for i in taxonomy_data.intents] + [""])
     return create_model(
         'GeneratedDraft',
-        draft_reply=(str, Field(min_length=1, max_length=1200)),
-        evidence_ids=(list[str], Field(max_length=5)),
+        draft_reply=(str, Field()),
+        evidence_ids=(list[str], Field()),
         insufficient_evidence=(bool, ...),
         intent=(Literal[intent_labels], Field(description="The primary intent of the customer inquiry.")),
         __config__=ConfigDict(extra="forbid", strict=True)

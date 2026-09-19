@@ -22,7 +22,7 @@ from spotify_cares.rate_limits import RateEvidence, QuotaViolation, extract_rate
 
 GROQ_GENERATION_SETTINGS = {"temperature": 0, "max_completion_tokens": 2048,
                             "reasoning_effort": "low", "stream": False}
-STRICT_MODELS = {"openai/gpt-oss-20b", "openai/gpt-oss-120b"}
+STRICT_MODELS = {"openai/gpt-oss-20b", "openai/gpt-oss-120b", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"}
 
 
 def generation_settings(config):

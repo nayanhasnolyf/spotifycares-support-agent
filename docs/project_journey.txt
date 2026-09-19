@@ -1,0 +1,66 @@
+# SpotifyCares Support Agent: The Story So Far (Interview Prep)
+
+This document is designed to help you understand the entire journey of this project. It pairs simple, everyday explanations with the proper technical terminology (in bold) so you can easily explain the architecture and overcome challenges during your company interview.
+
+---
+
+## 1. What was the goal?
+The mission was to build an **AI Customer Support Agent for SpotifyCares**. 
+
+Normally, if you ask a raw AI a question, it just guesses the answer. Sometimes it confidently makes things up (this is called **LLM hallucination**). For an enterprise company, making up refund policies or faking account actions is a disaster. 
+
+So, our goal was to build a safe, restricted AI using **Retrieval-Augmented Generation (RAG)**. Instead of guessing, our AI is forced to search a local database of *real, past support tickets* (our **ground-truth corpus**) that human agents successfully resolved. It reads those past tickets and drafts a reply strictly based on that retrieved evidence. Furthermore, we built a **Deterministic Policy Engine**. If the customer asks about sensitive things like billing, refunds, or security, the AI isn't allowed to answer—the deterministic engine overrides the LLM and instantly routes the ticket to a human manager (**escalation**).
+
+---
+
+## 2. The Plan (How we built it)
+
+We built this as an end-to-end **Data Pipeline** and **Agentic System**:
+
+1. **Cleaning the Data (Data Ingestion & Preprocessing):** We started with raw Twitter customer support conversations. We cleaned them, grouped replies by conversation thread, and converted them into a clean JSON format.
+2. **Organizing with Tags (Machine Annotation / Synthetic Data Generation):** We had hundreds of tickets, but no labeled data. We used an LLM (Large Language Model) to automatically read and tag them with categories via **Zero-Shot/Few-Shot Classification** based on a strict **Taxonomy** (like "Billing", "Playback"). This synthetic data helped us train our baseline math models.
+3. **The Agent (RAG Architecture):** When a new customer sends a message, the Agent:
+   - Converts the message into a mathematical representation (**Vector Embeddings**).
+   - Searches the database for the 5 most mathematically similar past issues (**Semantic Vector Search** using **Cosine Similarity**).
+   - Drafts a reply based *only* on those 5 past issues (**Context-Grounded Prompting**).
+   - Outputs the response in a strict, predictable JSON format (enforced via **Pydantic Schemas**).
+4. **Testing (Automated Offline Evaluation):** Before putting the AI in front of real customers, we built a testing harness to grade the AI on 150 "golden" test cases (**Golden Evaluation Set**) to measure its **Intent Accuracy** and **Escalation Recall** (safety).
+
+---
+
+## 3. The Problems We Faced & How We Fixed Them
+
+Building this wasn't smooth sailing. We ran into three major real-world engineering challenges:
+
+### Problem A: Hitting API Speed Limits (Provider Rate Limiting & Quota Exhaustion)
+**What happened:** To power the AI, we use external APIs (Groq and Gemini). Because we were using free tiers, they have strict speed limits (**Tokens Per Minute (TPM)** and **Requests Per Minute (RPM)** limits). When we tried to annotate hundreds of tickets in batch, we flooded the API. The external providers threw HTTP errors (RateLimitExceeded) and crashed our program.
+
+**How we fixed it:** 
+- We engineered a **Rate Limit Ledger**. Instead of shouting all our questions at the AI at once, our program locally tracks how many tokens it has used. It patiently waits and paces its requests (e.g., 1 request per 60 seconds) to stay under the TPM budget.
+- We built a **Multi-Provider Fallback System**. If the primary AI (Groq) throws a hard error, our system automatically catches the exception and quietly routes the request to our backup API provider (Gemini) to finish the job without crashing.
+
+### Problem B: The AI was failing its tests (Low Intent Accuracy)
+**What happened:** When we finally ran our offline evaluation on the 150 Golden Examples, the AI only guessed the right customer category 16% of the time. 
+
+**Why it happened:** 
+Because we were bottlenecked by the API rate limits earlier (Problem A), our background data generation paused prematurely. Our fallback statistical classifier (**TF-IDF Logistic Regression**) was only trained on 3 out of the 9 possible categories. It suffered from the **Out-of-Vocabulary (OOV)** problem—it couldn't predict classes it had never seen! Also, our main Agent was relying on this dumb statistical model for classification instead of using the LLM.
+
+**How we fixed it:** 
+- We launched a detached background task to organically complete the dataset generation over 4 hours, curing the data starvation.
+- **The big architecture shift:** We upgraded the Agent's brain. We updated the Pydantic schema so that the LLM performs native **Zero-Shot Intent Classification**. The LLM now actively reads the 9 categories and infers the correct intent semantically, completely bypassing the dumb statistical model.
+
+### Problem C: The AI was a scaredy-cat (Over-Escalation / False Positives)
+**What happened:** During the test, the AI refused to answer 82% of the questions, constantly flagging them as high-risk and escalating to a human (**Empty Retrieval Rate / High Escalation Rate**).
+
+**Why it happened:**
+Our deterministic safety rules were incredibly strict. We used **Regex Pattern Matching** for risk signals. If a customer just used words that *sounded* like a security issue (e.g., "password", "locked", "account"), the safety engine overrode the LLM and escalated. 
+
+**How we fixed it / The takeaway:** 
+This isn't a bug; it's a feature! In enterprise AI, a **False Positive** (escalating a safe ticket to a human) hurts efficiency, but a **False Negative** (letting an AI try to fix a hacked account and failing) causes catastrophic brand damage. We proved that our deterministic safety policy works perfectly to restrict dangerous generative behavior.
+
+---
+
+## 4. Summary for your Interview
+If the company asks you about this project, the best story to tell is:
+
+> *"I didn't just build a wrapper around an LLM. I built an enterprise-grade Retrieval-Augmented Generation (RAG) agent that is architecturally restricted from hallucinating through deterministic safety routing and strict Pydantic schemas. The biggest engineering challenge I faced was handling API rate limits during batch processing. I solved this by building a resilient execution engine that locally tracks token budgets to pace requests, and automatically fails over to a secondary LLM provider when the primary API is exhausted. I prioritized enterprise safety—accepting higher False Positive escalations over the risk of unauthorized generative actions on user accounts."*

@@ -63,10 +63,10 @@ annotation:
     tokens_per_minute: 8000
     requests_per_day: 1000
   machine_rate:
-    request_interval_seconds: 15
-    max_retries: 2
-    initial_backoff_seconds: 5
-    max_backoff_seconds: 30
+    request_interval_seconds: 1
+    max_retries: 5
+    initial_backoff_seconds: 1
+    max_backoff_seconds: 1
     jitter_seconds: 1
     max_single_wait_seconds: 30
     max_total_retry_wait_seconds: 60
