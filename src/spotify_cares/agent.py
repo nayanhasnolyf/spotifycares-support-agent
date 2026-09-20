@@ -125,14 +125,22 @@ class SemanticRetriever:
         return hits
 
 
+class GeneratedDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    draft_reply: str = Field(default="", max_length=1200)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=5)
+    insufficient_evidence: bool = True
+    intent: str = Field(default="", description="The primary intent of the customer inquiry.")
+
+
 def build_draft_model(taxonomy_data):
     intent_labels = tuple([i.label for i in taxonomy_data.intents] + [""])
     return create_model(
         'GeneratedDraft',
-        draft_reply=(str, Field()),
-        evidence_ids=(list[str], Field()),
-        insufficient_evidence=(bool, ...),
-        intent=(Literal[intent_labels], Field(description="The primary intent of the customer inquiry.")),
+        draft_reply=(str, Field(default="", min_length=1, max_length=1200)),
+        evidence_ids=(list[str], Field(default_factory=list, max_length=5)),
+        insufficient_evidence=(bool, True),
+        intent=(Literal[intent_labels], Field(default="", description="The primary intent of the customer inquiry.")),
         __config__=ConfigDict(extra="forbid", strict=True)
     )
 
@@ -165,7 +173,14 @@ def direct_signals(message, context=()):
     return PolicySignals(current_security_incident=security, payment_investigation=payment, private_account_action=action)
 
 
-def validate_draft(draft_model, raw, evidence):
+def validate_draft(draft_model_or_raw, raw_or_evidence, evidence=None):
+    if evidence is not None:
+        draft_model = draft_model_or_raw
+        raw = raw_or_evidence
+    else:
+        draft_model = GeneratedDraft
+        raw = draft_model_or_raw
+        evidence = raw_or_evidence
     draft = draft_model.model_validate_json(raw)
     allowed = {e["example_id"] for e in evidence}
     if not draft.draft_reply.strip() or len(set(draft.evidence_ids)) != len(draft.evidence_ids) or not set(draft.evidence_ids) <= allowed:

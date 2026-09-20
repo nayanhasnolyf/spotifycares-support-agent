@@ -47,7 +47,7 @@ annotation:
   golden_random_size: 150
   golden_challenge_size: 50
   training_pilot_size: 30
-  machine_model: gemini-3.6-flash
+  machine_model: gemini-2.5-flash
   machine_provider: gemini
   groq_model: openai/gpt-oss-20b
   groq_prompt_path: configs/machine_annotation_prompt_v3.txt
