@@ -76,7 +76,19 @@ Hypothesised, not yet measured:
 
 ---
 
+## Repository Layout
+
+```text
+├── app/                  # Streamlit applications (agent demo, annotation tools)
+├── configs/              # Project configs, agent settings, and frozen taxonomy
+├── docs/                 # Methodology, implementation plan, decision log, and guides
+├── scripts/              # Developer utility scripts (e.g. prediction error inspection)
+├── src/spotify_cares/    # Core package (agent, baselines, evaluation, preprocessing)
+└── tests/                # Automated test suite (offline, deterministic, no live API calls)
+```
+
 ## Running the Application
+
 
 ### 1. Requirements
 
