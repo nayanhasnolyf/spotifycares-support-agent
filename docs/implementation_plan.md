@@ -271,3 +271,7 @@ Exit criteria: every reported number traces to a generated artifact, instruction
 **Next Steps:**
 - Run live golden evaluation with `uv run --env-file .env spotify-cares evaluate --queue golden --live --golden-confirmed`.
 - Review report metrics to confirm if the 75% accuracy target has been reached.
+
+## Status Correction (2026-10-15)
+
+The 2026-09-18 status above overstated completion. Stage 8 and Stage 9 are **not complete**: the latest saved golden report shows a 100% agent generation fallback, and the earlier 36.0% figure mixed LLM and TF-IDF fallback predictions and is no longer reproducible (see D024). The README now reports only traceable numbers. Remaining work: a clean, fallback-free agent evaluation, golden double-labelling for agreement, and human reply ratings.

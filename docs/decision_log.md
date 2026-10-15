@@ -187,3 +187,9 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-09-20
 - **Decision:** Restored the `GeneratedDraft` class export and backward-compatible signature for `validate_draft` in `src/spotify_cares/agent.py`, restored `machine_model` in `configs/project.yaml` to preserve frozen Stage 4 contracts, and updated the agent's fallback model to `gemini-3.6-flash`. Verified live that Groq and Gemini daily quotas have reset.
 - **Rationale:** Prior edits to dynamic draft generation broke `tests/test_agent.py` and `tests/test_config.py`. Restoring backward compatibility brings the test suite back to 100% pass (148/148 tests). Checking API availability confirmed that both providers are operational for live evaluation.
+
+## D024 — Report only traceable agent results in the README
+
+- **Date:** 2026-10-15
+- **Decision:** Replace the README's 36.0% agent headline with the latest saved `report.json` (agent 100% generation fallback) and keep the 36.0% run only as a superseded, non-reproducible historical figure.
+- **Rationale:** The 36.0% run mixed LLM outputs with TF-IDF fallback intents across resumed sessions, its prediction cache is no longer retained, and the agent configuration has changed since. Stage 9 requires every reported number to trace to a generated artifact, so Stage 8/9 cannot be described as complete until a clean, fallback-free agent evaluation is run.
