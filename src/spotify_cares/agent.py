@@ -135,7 +135,7 @@ class GeneratedDraft(BaseModel):
 
 def build_draft_model(taxonomy_data):
     intent_labels = tuple([i.label for i in taxonomy_data.intents] + [""])
-    return create_model(
+    model = create_model(
         'GeneratedDraft',
         draft_reply=(str, Field(default="", min_length=1, max_length=1200)),
         evidence_ids=(list[str], Field(default_factory=list, max_length=5)),
@@ -143,6 +143,13 @@ def build_draft_model(taxonomy_data):
         intent=(Literal[intent_labels], Field(default="", description="The primary intent of the customer inquiry.")),
         __config__=ConfigDict(extra="forbid", strict=True)
     )
+    return model
+
+
+def draft_schema(model):
+    schema = model.model_json_schema()
+    schema["required"] = sorted(schema.get("properties", {}).keys())
+    return schema
 
 
 def unsafe_claim(text):
@@ -197,8 +204,9 @@ def generate(config, settings, message, context, evidence, provider=None):
         taxonomy_data, config.annotation.guide_path.read_text(encoding="utf-8"))
     payload = {"customer_message": redact_text(message,safe_domains=())[0],
                "preceding_context": [redact_text(t,safe_domains=())[0] for t in context], "retrieved_untrusted_examples": evidence}
+    schema_dict = draft_schema(DraftModel)
     record = {"provider": settings.provider, "model": settings.model, "prompt_sha256": digest(system),
-              "input_sha256": digest(payload), "schema_sha256": digest(DraftModel.model_json_schema()),
+              "input_sha256": digest(payload), "schema_sha256": digest(schema_dict),
               "attempts": [], "fallback": False}
     owned = provider is None
     provider_config = config.model_copy(deep=True)
@@ -227,7 +235,7 @@ def generate(config, settings, message, context, evidence, provider=None):
                             time.sleep(wait)
                     _append_jsonl(ledger, {"time": time.time(), "provider": prov_name, "model": prov_model, "kind": "attempt"})
                     raw, model_version = prov_instance(model=prov_model, system=system,
-                        schema=DraftModel.model_json_schema(), message=payload)
+                        schema=schema_dict, message=payload)
                     record["attempts"].append({"status": "response", "model_version": model_version,
                                                "controls": getattr(prov_instance,"last_controls",None)})
                     record["generation_settings"] = {"temperature":0, "max_output_tokens":settings.max_output_tokens if prov_name=="groq" else 2048,

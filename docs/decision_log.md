@@ -193,3 +193,10 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Date:** 2026-10-15
 - **Decision:** Replace the README's 36.0% agent headline with the latest saved `report.json` (agent 100% generation fallback) and keep the 36.0% run only as a superseded, non-reproducible historical figure.
 - **Rationale:** The 36.0% run mixed LLM outputs with TF-IDF fallback intents across resumed sessions, its prediction cache is no longer retained, and the agent configuration has changed since. Stage 9 requires every reported number to trace to a generated artifact, so Stage 8/9 cannot be described as complete until a clean, fallback-free agent evaluation is run.
+
+## D025 — Fix Groq strict schema required fields and console charmap printing
+
+- **Date:** 2026-10-15
+- **Decision:** Updated `src/spotify_cares/agent.py` so the JSON schema provided to Groq (`draft_schema`) explicitly declares all properties in `required` as required by Groq's strict schema validator, while keeping `GeneratedDraft` defaults intact. In `src/spotify_cares/cli.py`, removed `ensure_ascii=False` from console `print` calls to avoid Windows `charmap` codec errors on Unicode punctuation characters.
+- **Rationale:** Groq rejected all agent generation calls with `HTTP 400 invalid JSON schema for response_format: 'machine_annotation': /required: required is required to be supplied and to be an array including every key in properties`, instantly triggering fallback to the TF-IDF baseline and giving 16% accuracy. With this fix, live requests to `openai/gpt-oss-120b` execute and validate with 0% fallback.
+

@@ -187,8 +187,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.output:
                 args.output.parent.mkdir(parents=True,exist_ok=True)
                 with args.output.open("x",encoding="utf-8") as handle:
-                    handle.write(json.dumps(result,ensure_ascii=False)+"\n")
-            print(json.dumps(result,indent=2,ensure_ascii=False))
+                    handle.write(json.dumps(result,indent=2,ensure_ascii=False)+"\n")
+            print(json.dumps(result,indent=2))
             return 1 if result["fallback"] else 0
         except (AnnotationError, ValueError, OSError) as error:
             print(f"blocked: {error}")
@@ -216,7 +216,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             with args.output.open("w", encoding="utf-8") as handle:
                 handle.write(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
-            print(json.dumps(report, indent=2, ensure_ascii=False))
+            print(json.dumps(report, indent=2))
             return 0
         except (AnnotationError, ValueError, OSError) as error:
             print(f"blocked: {error}")
