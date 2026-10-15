@@ -206,4 +206,11 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Decision:** Updated `README.md` and evaluation reports with live evaluation results using Groq `openai/gpt-oss-120b`. The agent completed 74 clean inferences before Groq exhausted its daily request allowance, achieving 48.6% intent accuracy (36/74) with zero generation fallbacks. The remaining 76 examples degraded to the deterministic policy, producing an overall blended accuracy of 31.3% (47/150).
 - **Rationale:** Prior reports suffered from 100% fallback (16% baseline accuracy) due to the JSON schema bug resolved in D025. With schema validation functioning, the 120B model demonstrates a ~3x intent accuracy improvement over the TF-IDF baseline (16.0%) and ~4x over the majority class baseline (12.0%).
 
+## D027 — Clean repository root, preserve utilities in scripts/, and establish contributor onboarding
+
+- **Date:** 2026-10-15
+- **Decision:** Removed 13 ad-hoc scratch and debugging scripts from the repository root, moved the `check_errors.py` analysis utility into `scripts/check_errors.py` with repository-relative paths and Unicode-safe console output, verified that `.gitignore` prevents tracking `.env`, virtualenvs, cache artifacts, and raw data, established `CONTRIBUTING.md` with explicit guidelines protecting the frozen 150 golden labels, and populated GitHub issues for community engagement.
+- **Rationale:** Preparing the repository for outside contributors requires clear separation between the installable package, reproducible scripts, and development guidelines, while strictly maintaining the integrity of the frozen human evaluation benchmark.
+
+
 
