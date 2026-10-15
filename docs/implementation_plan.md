@@ -276,3 +276,13 @@ Exit criteria: every reported number traces to a generated artifact, instruction
 
 Resolved the Groq JSON schema validation blocker (D025). Ran the live golden evaluation harness with Groq `openai/gpt-oss-120b`. The model completed 74 clean inferences before hitting daily provider limits, measuring **48.6% intent accuracy** with zero generation fallbacks. Blended accuracy across all 150 items (including deterministic policy fallbacks) is 31.3%. Updated `README.md` and `docs/decision_log.md` (D026).
 
+## Repository Hygiene and Contributor Onboarding (2026-10-15)
+
+- Cleaned 13 ad-hoc scratch and exploratory test files from the root directory.
+- Moved `check_errors.py` to `scripts/check_errors.py` with docstrings, repo-relative paths, and UTF-8 console output fallback.
+- Added repository layout and directory descriptions to `README.md`.
+- Added comprehensive `CONTRIBUTING.md` defining setup, test commands, rules against tuning on golden labels, evaluation honesty, and issue triage guidelines.
+- Created 7 GitHub issues (#1 through #7) with structured context, tasks, and acceptance criteria for community contributions.
+- Confirmed full test suite health (148/148 tests passing).
+
+
