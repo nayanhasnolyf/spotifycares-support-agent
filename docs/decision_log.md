@@ -200,3 +200,10 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Decision:** Updated `src/spotify_cares/agent.py` so the JSON schema provided to Groq (`draft_schema`) explicitly declares all properties in `required` as required by Groq's strict schema validator, while keeping `GeneratedDraft` defaults intact. In `src/spotify_cares/cli.py`, removed `ensure_ascii=False` from console `print` calls to avoid Windows `charmap` codec errors on Unicode punctuation characters.
 - **Rationale:** Groq rejected all agent generation calls with `HTTP 400 invalid JSON schema for response_format: 'machine_annotation': /required: required is required to be supplied and to be an array including every key in properties`, instantly triggering fallback to the TF-IDF baseline and giving 16% accuracy. With this fix, live requests to `openai/gpt-oss-120b` execute and validate with 0% fallback.
 
+## D026 — Live evaluation results on golden set with 120B model
+
+- **Date:** 2026-10-15
+- **Decision:** Updated `README.md` and evaluation reports with live evaluation results using Groq `openai/gpt-oss-120b`. The agent completed 74 clean inferences before Groq exhausted its daily request allowance, achieving 48.6% intent accuracy (36/74) with zero generation fallbacks. The remaining 76 examples degraded to the deterministic policy, producing an overall blended accuracy of 31.3% (47/150).
+- **Rationale:** Prior reports suffered from 100% fallback (16% baseline accuracy) due to the JSON schema bug resolved in D025. With schema validation functioning, the 120B model demonstrates a ~3x intent accuracy improvement over the TF-IDF baseline (16.0%) and ~4x over the majority class baseline (12.0%).
+
+

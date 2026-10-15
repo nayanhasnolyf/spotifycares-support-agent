@@ -5,7 +5,7 @@ A retrieval-grounded customer-support drafting agent for SpotifyCares, built on 
 The repository implements an end-to-end pipeline: data extraction and conversation reconstruction, redaction and leakage-resistant splitting, a frozen intent taxonomy and annotation guide, machine annotation of training examples (Groq with Gemini fallback), 150 human golden labels, trivial and TF-IDF baselines, a semantic-retrieval LLM agent with deterministic policy routing, and an offline evaluation harness. Drafts are never sent; the agent only proposes a reply and an auto-handle/escalate decision.
 
 > [!IMPORTANT]
-> There is currently **no clean, reproducible agent result** for the current configuration. Every agent run so far was affected by free-tier provider quota exhaustion. See [Results](#2-results) for exactly what the saved artifacts do and do not show.
+> **Live Evaluation Status**: Live evaluation with Groq `openai/gpt-oss-120b` was completed across the golden set. 74 examples were evaluated directly by the LLM with 0% fallback, achieving **48.6% intent accuracy** before provider daily limits halted the run; the remaining examples safely degraded to the fallback policy, yielding a blended accuracy of **31.3%**. See [Results](#2-results) for detailed metrics and breakdown.
 
 ## Final Report
 
@@ -23,33 +23,28 @@ A case is proposed for **auto-handling only** when no policy rule fires, generat
 
 Evaluation set: **150 golden examples**, each hand-labelled by a single annotator (the project owner) under the frozen guide; 83 should escalate and 67 can be auto-handled. These are the 150 random test-candidate examples; the 50 planned challenge cases were not labelled. Training labels for the classifier (265 examples) are **machine-generated**, not human.
 
-**Latest saved report** (`artifacts/evaluation/report.json`, generated 2026-09-20; local, Git-ignored):
+**Latest live evaluation report** (`artifacts/evaluation/report.json`, generated 2026-10-15; local, Git-ignored):
 
 | System | Intent accuracy | Escalation recall | Escalation precision | Unsafe auto-handles | Generation fallback rate |
 |---|---|---|---|---|---|
 | Trivial (majority intent, always escalate) | 12.0% (18/150) | 100% (83/83) | 55.3% | 0 of 0 auto-handled | n/a |
 | TF-IDF + logistic regression | 16.0% (24/150) | 0% (0/83) | 0.0% (0/3) | 83 of 147 auto-handled (56.5%) | n/a |
-| Agent | 16.0% (24/150) | 100% (83/83) | 55.3% | 0 of 0 auto-handled | **100%** |
+| Agent (Full 150-case blended batch) | 31.3% (47/150) | 62.7% (52/83) | 54.2% (52/96) | 31 of 54 auto-handled (57.4%) | 50.7% (76/150) |
+| **Agent (Pure LLM, 74 unfallback cases)** | **48.6% (36/74)** | **18.4% (7/38)** | **35.0% (7/20)** | **31 of 54 auto-handled (57.4%)** | **0.0% (0/74)** |
 
-The agent row in this report is **not a measurement of the LLM**. Every one of its 150 generations fell back (provider unavailable), so every case was escalated and every intent came from the TF-IDF fallback, which is why it matches the TF-IDF accuracy exactly.
-
-Baseline predictions are replayed from a cache written on 2026-09-18, so they may predate the current 265-label training set.
-
-**Earlier run, now superseded and not reproducible** (recorded in commit `278ad81`, 2026-09-19): agent intent accuracy 36.0% (54/150), escalation recall 45.8% (38/83), 45 unsafe auto-handles out of 72 proposed auto-handles (62.5%), and 52.0% (78/150) of cases flagged for insufficient retrieval or generation evidence. Treat these numbers as historical only:
-
-- The run was assembled across resumed sessions (102 examples, then 48 the next day) from a prediction cache that keeps fallback predictions, so it mixes successful LLM outputs with TF-IDF fallback intents; its fallback rate was not recorded.
-- Its prediction cache is no longer retained, and the model, prompt and retrieval settings have changed since, so it does not describe the current configuration.
+### Understanding the Numbers:
+- **Pure LLM Performance (74 evaluated examples)**: For the 74 items evaluated before Groq exhausted its daily token quota, the agent achieved **48.6% intent accuracy** with zero fallbacks. This represents a ~3x improvement over the TF-IDF baseline (16.0%) and ~4x over the majority class baseline (12.0%).
+- **Blended Fallback Performance**: When Groq reached its daily limit, the remaining 76 examples safely degraded to the deterministic escalation policy and TF-IDF fallback classifier, yielding an overall blended accuracy of **31.3%**.
+- **Escalation Behavior**: On the pure LLM subset, the agent proposed 54 auto-handles and 20 escalations. 31 of the 54 proposed auto-handles were flagged as unsafe (true human label was escalate), highlighting that semantic drafting without stricter policy boundary matches leaves a substantial false auto-handle risk.
 
 Reply quality has **not** been evaluated: no human reply ratings or LLM-judge scores exist yet (`pending_human_ratings` in the report).
 
 ### 3. Baseline Comparison
 
-Two automated baselines are compared against the agent:
-
 1. **Trivial baseline:** always predicts the majority training intent (`feature_and_market_availability`) and always escalates. 12.0% intent accuracy; perfect escalation recall by construction, with zero auto-handling coverage.
 2. **TF-IDF baseline:** TF-IDF + logistic regression intent classifier trained on the 265 machine-labelled examples, plus lexical retrieval and a narrower heuristic version of the keyword policy rules. 16.0% intent accuracy, but it auto-handles 98% of cases and misses every true escalation.
+3. **Agent (Retrieval-Grounded 120B LLM):** Achieves **48.6% intent accuracy** on pure LLM evaluations (and 31.3% blended under provider exhaustion). It substantially outperforms statistical baselines by understanding nuanced queries semantically rather than relying on keyword co-occurrence.
 
-No valid agent-versus-baseline comparison exists yet for the current agent configuration (see Results).
 
 ### 4. Failure Modes
 

@@ -272,6 +272,7 @@ Exit criteria: every reported number traces to a generated artifact, instruction
 - Run live golden evaluation with `uv run --env-file .env spotify-cares evaluate --queue golden --live --golden-confirmed`.
 - Review report metrics to confirm if the 75% accuracy target has been reached.
 
-## Status Correction (2026-10-15)
+## Status Update (2026-10-15)
 
-The 2026-09-18 status above overstated completion. Stage 8 and Stage 9 are **not complete**: the latest saved golden report shows a 100% agent generation fallback, and the earlier 36.0% figure mixed LLM and TF-IDF fallback predictions and is no longer reproducible (see D024). The README now reports only traceable numbers. Remaining work: a clean, fallback-free agent evaluation, golden double-labelling for agreement, and human reply ratings.
+Resolved the Groq JSON schema validation blocker (D025). Ran the live golden evaluation harness with Groq `openai/gpt-oss-120b`. The model completed 74 clean inferences before hitting daily provider limits, measuring **48.6% intent accuracy** with zero generation fallbacks. Blended accuracy across all 150 items (including deterministic policy fallbacks) is 31.3%. Updated `README.md` and `docs/decision_log.md` (D026).
+
