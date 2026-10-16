@@ -212,5 +212,9 @@ This is a chronological record of decisions actually made. It is not a list of a
 - **Decision:** Removed 13 ad-hoc scratch and debugging scripts from the repository root, moved the `check_errors.py` analysis utility into `scripts/check_errors.py` with repository-relative paths and Unicode-safe console output, verified that `.gitignore` prevents tracking `.env`, virtualenvs, cache artifacts, and raw data, established `CONTRIBUTING.md` with explicit guidelines protecting the frozen 150 golden labels, and populated GitHub issues for community engagement.
 - **Rationale:** Preparing the repository for outside contributors requires clear separation between the installable package, reproducible scripts, and development guidelines, while strictly maintaining the integrity of the frozen human evaluation benchmark.
 
+## D028 — Keep the issue #2 review separate from frozen policy
 
-
+- **Date:** 2026-10-16
+- **Decision:** Document a development-only candidate merge of `playback_and_audio` and `app_device_technical`, retaining observable symptom/device detail as proposed secondary attributes. Do not apply the mapping or change frozen artifacts in this contribution.
+- **Evidence and limits:** Four conversations from the reproducibly sampled 80-item development queue show adjacent technical symptoms and explicit-device contrast cases. These are qualitative review observations, not independent labels or a model confusion matrix. Compare a separately versioned candidate with the current boundary rule before adopting it; do not claim accuracy improvements from reducing the number of classes.
+- **Data boundary:** Rebuild from the public source and inspect only development inputs with preceding context. Leave real golden labels and future reference replies out of the review. Keep data/queues local; include only manually checked, shortened redacted excerpts with source attribution and CC BY-NC-SA 4.0 licensing in the proposal.

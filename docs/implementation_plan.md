@@ -286,3 +286,10 @@ Resolved the Groq JSON schema validation blocker (D025). Ran the live golden eva
 - Confirmed full test suite health (148/148 tests passing).
 
 
+
+## Issue #2 — development-only taxonomy review (2026-10-16)
+
+- Rebuilt the public source through extraction and preprocessing without changing configuration: 41,339 eligible examples, 5,198 development inputs, and nine passing leakage checks.
+- Reconstructed only the deterministic 80-item development queue and inspected incoming messages plus available preceding context. No real golden labels or future reference replies were used in the review.
+- Added `docs/intent_taxonomy_review.md`: a candidate technical-intent merge with four traceable development conversations, routing safeguards, a comparison plan, and source/license/AI-assistance attribution.
+- The proposal is ready for maintainer discussion. Adoption and any future versioned policy trial require a separate decision; the active taxonomy, annotation guide, labels, prompts, thresholds, and routing code remain unchanged.
